@@ -2,7 +2,7 @@
 
 char g_dummybuf[16] = { 0 };
 
-polbase* polnewbase(polloghandler loghandler, DWORD logverboseflags, int connect2ndbuffer) {
+polbase* polnewbase(polloghandler loghandler, unsigned int logverboseflags, int connect2ndbuffer) {
 	clibpoll* muebase = new clibpoll;
 	muebase->init(loghandler, logverboseflags, 0, connect2ndbuffer);
 	return (polbase*)muebase;
@@ -23,17 +23,17 @@ void poldelcustomcontext(polbase* base, LPPOL_PS_CTX ctx) {
 	poll->deletectx(ctx);
 }
 
-void pollisten(polbase* base, WORD port, polacceptcb acceptcb, LPVOID arg, char* listenip) {
+void pollisten(polbase* base, unsigned short int port, polacceptcb acceptcb, void* arg, char* listenip) {
 	clibpoll* poll = (clibpoll*)base;
 	poll->listen(port, acceptcb, arg, listenip);
 }
 
-void polsetacceptcbargument(polbase* base, LPVOID arg) {
+void polsetacceptcbargument(polbase* base, void* arg) {
 	clibpoll* poll = (clibpoll*)base;
 	poll->setacceptcbargument(arg);
 }
 
-void polsetreadeventcbargument(polbase* base, int event_id, LPVOID arg) {
+void polsetreadeventcbargument(polbase* base, int event_id, void* arg) {
 	clibpoll* poll = (clibpoll*)base;
 	poll->setreadeventcbargument(event_id, arg);
 }
@@ -43,7 +43,7 @@ void poldispatch(polbase* base) {
 	poll->dispatch();
 }
 
-int polconnect(polbase* base, const char* ipaddr, WORD port, char* initbuf, int initlen, LPPOL_PS_CTX ctx) {
+int polconnect(polbase* base, const char* ipaddr, unsigned short int port, char* initbuf, int initlen, LPPOL_PS_CTX ctx) {
 	clibpoll* poll = (clibpoll*)base;
 	int eventid = poll->makeconnect(ipaddr, port, 0, ctx);
 	LPPOL_PS_CTX _ctx = poll->getctx(eventid);
@@ -55,12 +55,12 @@ int polconnect(polbase* base, const char* ipaddr, WORD port, char* initbuf, int 
 		poll->addlog(epollogtype::eWARNING, "%s(), initbuf is NULL.", __func__);
 		return NULL;
 	}
-	_ctx->_this = (LPVOID)poll;
+	_ctx->_this = (void*)poll;
 	poll->connect(eventid, initbuf, initlen);
 	return eventid;
 }
 
-int polmakeconnect(polbase* base, const char* ipaddr, WORD port, LPPOL_PS_CTX ctx) {
+int polmakeconnect(polbase* base, const char* ipaddr, unsigned short int port, LPPOL_PS_CTX ctx) {
 	clibpoll* poll = (clibpoll*)base;
 	int eventid = poll->makeconnect(ipaddr, port, 0, ctx);
 	LPPOL_PS_CTX _ctx = poll->getctx(eventid);
@@ -68,7 +68,7 @@ int polmakeconnect(polbase* base, const char* ipaddr, WORD port, LPPOL_PS_CTX ct
 		poll->addlog(epollogtype::eWARNING, "%s(), polmakeconnect failed.", __func__);
 		return NULL;
 	}
-	_ctx->_this = (LPVOID)poll;
+	_ctx->_this = (void*)poll;
 	return eventid;
 }
 
@@ -88,12 +88,12 @@ bool polisconnected(polbase* base, int eventid) {
 	return bret;
 }
 
-void polsetcb(polbase* base, int event_id, polreadcb readcb, poleventcb eventcb, LPVOID arg) {
+void polsetcb(polbase* base, int event_id, polreadcb readcb, poleventcb eventcb, void* arg) {
 	clibpoll* poll = (clibpoll*)base;
 	poll->setconnectcb(event_id, readcb, eventcb, arg);
 }
 
-bool polwrite(polbase* base, int event_id, LPBYTE lpMsg, DWORD dwSize) {
+bool polwrite(polbase* base, int event_id, unsigned char* lpMsg, unsigned int dwSize) {
 	clibpoll* poll = (clibpoll*)base;
 	return poll->sendbuffer(event_id, lpMsg, dwSize);
 }
@@ -115,7 +115,7 @@ void polbasedelete(polbase* base) {
 
 void polclosesocket(polbase* base, int event_id) {
 	clibpoll* poll = (clibpoll*)base;
-	poll->closesocket(event_id);
+	poll->closefd(event_id);
 }
 
 void polgetipaddr(polbase* base, int event_id, char* ipaddr) {
@@ -123,7 +123,7 @@ void polgetipaddr(polbase* base, int event_id, char* ipaddr) {
 	poll->getipaddr(event_id, ipaddr);
 }
 
-SOCKET polgetsocket(polbase* base, int event_id) {
+sock_t polgetsocket(polbase* base, int event_id) {
 	clibpoll* poll = (clibpoll*)base;
 	std::lock_guard<std::recursive_mutex> lk(poll->m);
 	return poll->getsocket(event_id);
@@ -152,12 +152,12 @@ void poladdlog(polbase* base, epollogtype type, const char* msg, ...) {
 	va_list pArguments;
 	clibpoll* poll = (clibpoll*)base;
 	va_start(pArguments, msg);
-	vsprintf_s(szBuffer, 1024, msg, pArguments);
+	vsprintf(szBuffer, msg, pArguments);
 	va_end(pArguments);
 	poll->addlog(type, szBuffer);
 }
 
-bool polsetcustomarg(polbase* base, int event_id, LPVOID arg)
+bool polsetcustomarg(polbase* base, int event_id, void* arg)
 {
 	clibpoll* poll = (clibpoll*)base;
 	std::lock_guard<std::recursive_mutex> lk(poll->m);
@@ -169,10 +169,10 @@ bool polsetcustomarg(polbase* base, int event_id, LPVOID arg)
 	return true;
 }
 
-LPVOID polgetcustomarg(polbase* base, int event_id)
+void* polgetcustomarg(polbase* base, int event_id)
 {
 	clibpoll* poll = (clibpoll*)base;
-	LPVOID arg = NULL;
+	void* arg = NULL;
 	std::lock_guard<std::recursive_mutex> lk(poll->m);
 	LPPOL_PS_CTX ctx = poll->getctx(event_id);
 	if (ctx == NULL) {

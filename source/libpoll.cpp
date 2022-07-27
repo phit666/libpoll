@@ -1,9 +1,5 @@
 #include "includes/libpoll.h"
 #include "includes/libpoll-wrapper.h"
-#include <assert.h>
-
-#pragma comment(lib, "ws2_32.lib")
-
 
 clibpoll::clibpoll()
 {
@@ -23,7 +19,7 @@ clibpoll::clibpoll()
 
 	this->m_initcltextbuffsize = POL_MAX_IO_BUFFER_SIZE;
 	this->m_initsvrextbuffsize = POL_MAX_IO_BUFFER_SIZE;
-	this->m_logverboseflags = (DWORD)epollogtype::eINFO | (DWORD)epollogtype::eERROR;
+	this->m_logverboseflags = (unsigned int)epollogtype::eINFO | (unsigned int)epollogtype::eERROR;
 	this->fnc_loghandler = NULL;
 
 	this->m_pollfdarr = NULL;
@@ -36,7 +32,9 @@ clibpoll::~clibpoll()
 	this->clear();
 	if (this->m_pollfdarr != NULL)
 		free(this->m_pollfdarr);
+#ifdef _WIN32
 	WSACleanup();
+#endif
 }
 
 void clibpoll::clear()
@@ -51,7 +49,7 @@ void clibpoll::clear()
 			if (_ctx != NULL) {
 				this->addlog(epollogtype::eDEBUG, "%s(), closing event id %d.", __func__, _ctx->m_eventid);
 				if (_ctx->m_socket != INVALID_SOCKET)
-					::closesocket(_ctx->m_socket);
+					closesocket(_ctx->m_socket);
 				if (_ctx->IOContext[1].pBuffer != NULL) {
 					::free(_ctx->IOContext[1].pBuffer);
 				}
@@ -64,8 +62,8 @@ void clibpoll::clear()
 
 void clibpoll::makepollfdarr()
 {
-	WSAPOLLFD pollfd;
-	SOCKET s;
+	_pollfd pollfd;
+	sock_t s;
 	LPPOL_PS_CTX ctx;
 	int pollfdsize = 0;
 	std::map <int, LPPOL_PS_CTX>::iterator iterq;
@@ -75,19 +73,19 @@ void clibpoll::makepollfdarr()
 	std::lock_guard<std::recursive_mutex> lk(m);
 	this->m_rebuildpollfdarr = false;
 	this->m_pollfdcounts = 0;
-	BYTE* tmpbuffer = (BYTE*)realloc((BYTE*)this->m_pollfdarr, this->m_polmaps.size() * sizeof(WSAPOLLFD));
+	unsigned char* tmpbuffer = (unsigned char*)realloc((unsigned char*)this->m_pollfdarr, this->m_polmaps.size() * sizeof(_pollfd));
 	if (tmpbuffer == NULL)
 		return;
 	for (iterq = this->m_polmaps.begin(); iterq != this->m_polmaps.end(); iterq++)
 	{
-		s = (SOCKET)iterq->first;
+		s = (sock_t)iterq->first;
 		ctx = iterq->second;
 		pollfd.fd = s;
 		switch (ctx->m_type) {
-		case (BYTE)epoliotype::eACCEPT_IO:
+		case (unsigned char)epoliotype::eACCEPT_IO:
 			pollfd.events = POLLRDNORM;
 			break;
-		case (BYTE)epoliotype::eCONNECT_IO:
+		case (unsigned char)epoliotype::eCONNECT_IO:
 			pollfd.events = POLLWRNORM;
 			break;
 		default:
@@ -96,10 +94,10 @@ void clibpoll::makepollfdarr()
 				pollfd.events |= POLLOUT;
 		}
 		pollfd.revents = 0;
-		memcpy(&tmpbuffer[pollfdsize], (LPBYTE)&pollfd, sizeof(WSAPOLLFD));
-		pollfdsize += sizeof(WSAPOLLFD);
+		memcpy(&tmpbuffer[pollfdsize], (unsigned char*)&pollfd, sizeof(_pollfd));
+		pollfdsize += sizeof(_pollfd);
 	}
-	this->m_pollfdarr = (WSAPOLLFD*)tmpbuffer;
+	this->m_pollfdarr = (_pollfd*)tmpbuffer;
 	this->m_pollfdcounts = this->m_polmaps.size();
 }
 
@@ -107,7 +105,7 @@ void clibpoll::deletectx(LPPOL_PS_CTX ctx)
 {
 	std::lock_guard<std::recursive_mutex> lk(m);
 	if (ctx->m_socket != INVALID_SOCKET)
-		::closesocket(ctx->m_socket);
+		closesocket(ctx->m_socket);
 	if (ctx->IOContext[1].pBuffer != NULL) {
 		::free(ctx->IOContext[1].pBuffer);
 	}
@@ -157,7 +155,7 @@ bool clibpoll::iseventidvalid(int event_id)
 LPPOL_PS_CTX clibpoll::getctx(int event_id)
 {
 	std::map<int, LPPOL_PS_CTX>::iterator Iter;
-	if ((SOCKET)event_id == INVALID_SOCKET)
+	if ((sock_t)event_id == INVALID_SOCKET)
 		return NULL;
 	Iter = this->m_polmaps.find(event_id);
 	if (Iter == this->m_polmaps.end()) {
@@ -166,44 +164,43 @@ LPPOL_PS_CTX clibpoll::getctx(int event_id)
 	return Iter->second;
 }
 
-void clibpoll::init(polloghandler loghandler, DWORD logverboseflags, size_t initclt2ndbufsize, size_t initsvr2ndbufsize)
+void clibpoll::init(polloghandler loghandler, unsigned int logverboseflags, size_t initclt2ndbufsize, size_t initsvr2ndbufsize)
 {
+#ifdef _WIN32
 	HANDLE tmphandle = NULL;
-
 	WORD wVersionRequested;
 	WSADATA wsaData;
 	int err;
 	wVersionRequested = MAKEWORD(2, 2);
-
+#endif
 	this->m_initcltextbuffsize = (initclt2ndbufsize != NULL) ? initclt2ndbufsize : this->m_initcltextbuffsize;
 	this->m_initsvrextbuffsize = (initsvr2ndbufsize != NULL) ? initsvr2ndbufsize : this->m_initsvrextbuffsize;
-	this->m_logverboseflags = (logverboseflags != (DWORD)-1) ? logverboseflags : this->m_logverboseflags;
+	this->m_logverboseflags = (logverboseflags != (unsigned int)-1) ? logverboseflags : this->m_logverboseflags;
 	this->fnc_loghandler = (loghandler != NULL) ? loghandler : this->fnc_loghandler;
 
 	this->addlog(epollogtype::eDEBUG, "libpoll version %02d.%02d.%02d", _LIBPOLL_MAJOR_VER_, _LIBPOLL_MINOR_VER_, _LIBPOLL_PATCH_VER_);
 
+#ifdef _WIN32
 	err = WSAStartup(wVersionRequested, &wsaData);
-
 	if (err != 0)
 	{
 		this->addlog(epollogtype::eERROR, "%s(), WSAStartup failed. with error: %d.", __func__, GetLastError());
 		return;
 	}
-
 	if (LOBYTE(wsaData.wVersion) != 2 ||
 		HIBYTE(wsaData.wVersion) != 2) {
 		WSACleanup();
 		this->addlog(epollogtype::eERROR, "%s(), WINSOCK wVersion not matched.", __func__);
 		return;
 	}
-
+#endif
 	this->m_listensocket = createsocket(true);
-	BYTE* tmpbuffer = (BYTE*)calloc(sizeof(WSAPOLLFD), sizeof(BYTE));
+	unsigned char* tmpbuffer = (unsigned char*)calloc(sizeof(_pollfd), sizeof(unsigned char));
 	if (tmpbuffer == NULL) {
 		this->addlog(epollogtype::eERROR, "%s(), m_pollfdarr is NULL.", __func__);
 		return;
 	}
-	this->m_pollfdarr = (WSAPOLLFD*)tmpbuffer;
+	this->m_pollfdarr = (_pollfd*)tmpbuffer;
 }
 
 void clibpoll::dispatch()
@@ -213,12 +210,16 @@ void clibpoll::dispatch()
 			break;
 		this->makepollfdarr();
 		if (this->m_pollfdcounts == 0) {
+#ifdef _WIN32
 			Sleep(1000);
+#else
+			usleep(1000000);
+#endif
 			continue;
 		}
-		int err = WSAPoll(this->m_pollfdarr, this->m_pollfdcounts, 1000);
+		int err = _poll(this->m_pollfdarr, this->m_pollfdcounts, 1000);
 		if (err == SOCKET_ERROR) {
-			this->addlog(epollogtype::eDEBUG, "WSAPOLL, Error : %d", WSAGetLastError());
+			this->addlog(epollogtype::eDEBUG, "WSAPOLL, Error : %d", SOCKERR);
 			continue;
 		}
 		if (err > 0) {
@@ -229,33 +230,31 @@ void clibpoll::dispatch()
 				
 				LPPOL_PS_CTX ctx = this->getctx(this->m_pollfdarr[n].fd);
 
-				//this->addlog(epollogtype::eDEBUG, "%s, event id %d revents: %d.", __func__, this->m_pollfdarr[n].fd, this->m_pollfdarr[n].revents);
-
 				if (ctx == NULL) {
 					this->addlog(epollogtype::eDEBUG, "%s, event id %d ctx is NULL.", __func__, this->m_pollfdarr[n].fd);
 					continue;
 				}
 
 				if (this->m_pollfdarr[n].revents & POLLHUP) {
-					this->close((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
+					this->closeeventid((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
 					this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLHUP.", __func__, this->m_pollfdarr[n].fd);
 					continue;
 				}
 
 				if (this->m_pollfdarr[n].revents & POLLERR) {
-					this->close((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
+					this->closeeventid((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
 					this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLERR.", __func__, this->m_pollfdarr[n].fd);
 					continue;
 				}
 
 				if (this->m_pollfdarr[n].revents & POLLNVAL) {
-					this->close((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
+					this->closeeventid((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
 					this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLNVAL.", __func__, this->m_pollfdarr[n].fd);
 					continue;
 				}
 
 				if (this->m_pollfdarr[n].revents & POLLRDNORM) {
-					if ((ctx->m_type & (BYTE)epoliotype::eACCEPT_IO) == (BYTE)epoliotype::eACCEPT_IO) {
+					if ((ctx->m_type & (unsigned char)epoliotype::eACCEPT_IO) == (unsigned char)epoliotype::eACCEPT_IO) {
 						this->addlog(epollogtype::eDEBUG, "%s, event id %d eACCEPT_IO", __func__, this->m_pollfdarr[n].fd);
 						this->handleaccept();
 						continue;
@@ -263,24 +262,24 @@ void clibpoll::dispatch()
 				}
 
 				if (this->m_pollfdarr[n].revents & POLLWRNORM) {
-					if ((ctx->m_type & (BYTE)epoliotype::eCONNECT_IO) == (BYTE)epoliotype::eCONNECT_IO) {
+					if ((ctx->m_type & (unsigned char)epoliotype::eCONNECT_IO) == (unsigned char)epoliotype::eCONNECT_IO) {
 						this->addlog(epollogtype::eDEBUG, "%s, event id %d eCONNECT_IO", __func__, this->m_pollfdarr[n].fd);
 						this->handleconnect(ctx);
 						continue;
 					}
 				}
 
-				if ((this->m_pollfdarr[n].revents & POLLIN) && ((ctx->m_type & (BYTE)epoliotype::eRECV_IO) == (BYTE)epoliotype::eRECV_IO)) {
+				if ((this->m_pollfdarr[n].revents & POLLIN) && ((ctx->m_type & (unsigned char)epoliotype::eRECV_IO) == (unsigned char)epoliotype::eRECV_IO)) {
 					if (!this->handlereceive(ctx)) {
-						this->close((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
+						this->closeeventid((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
 						this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLIN.", __func__, this->m_pollfdarr[n].fd);
 						continue;
 					}
 				}
 
-				if (this->m_pollfdarr[n].revents & POLLOUT && ((ctx->m_type & (BYTE)epoliotype::eSEND_IO) == (BYTE)epoliotype::eSEND_IO)) {
+				if (this->m_pollfdarr[n].revents & POLLOUT && ((ctx->m_type & (unsigned char)epoliotype::eSEND_IO) == (unsigned char)epoliotype::eSEND_IO)) {
 					if (!this->handlesend(ctx)) {
-						this->close((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
+						this->closeeventid((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
 						this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLOUT.", __func__, this->m_pollfdarr[n].fd);
 					}
 				}
@@ -294,12 +293,12 @@ void clibpoll::dispatchbreak()
 	this->m_loopbreak = true;
 }
 
-void clibpoll::setacceptcbargument(LPVOID arg)
+void clibpoll::setacceptcbargument(void* arg)
 {
 	this->m_acceptarg = arg;
 }
 
-void clibpoll::setreadeventcbargument(int event_id, LPVOID arg)
+void clibpoll::setreadeventcbargument(int event_id, void* arg)
 {
 	LPPOL_PS_CTX _ctx = this->getctx(event_id);
 	if (_ctx == NULL) {
@@ -309,7 +308,7 @@ void clibpoll::setreadeventcbargument(int event_id, LPVOID arg)
 	_ctx->arg = arg;
 }
 
-void clibpoll::listen(int listenport, polacceptcb acceptcb, LPVOID arg, char* listenip)
+void clibpoll::listen(int listenport, polacceptcb acceptcb, void* arg, char* listenip)
 {
 	this->m_acceptctx = new POL_PS_CTX;
 	this->m_acceptctx->clear();
@@ -320,7 +319,7 @@ void clibpoll::listen(int listenport, polacceptcb acceptcb, LPVOID arg, char* li
 
 	if (listenip != NULL) {
 		struct hostent* h = gethostbyname(listenip);
-		this->m_listenip = (h != NULL) ? ntohl(*(DWORD*)h->h_addr) : 0;
+		this->m_listenip = (h != NULL) ? ntohl(*(unsigned int*)h->h_addr) : 0;
 	}
 
 	if (!this->createlistensocket(listenport)) {
@@ -332,7 +331,7 @@ void clibpoll::listen(int listenport, polacceptcb acceptcb, LPVOID arg, char* li
 
 	this->m_acceptctx->m_socket = this->m_listensocket;
 	this->m_acceptctx->m_eventid = this->m_accepteventid;
-	this->m_acceptctx->m_type = (BYTE)epoliotype::eACCEPT_IO;
+	this->m_acceptctx->m_type = (unsigned char)epoliotype::eACCEPT_IO;
 
 	std::lock_guard<std::recursive_mutex> lk(m);
 	this->m_polmaps.insert(std::pair<int, LPPOL_PS_CTX>(this->m_accepteventid, this->m_acceptctx));
@@ -340,7 +339,7 @@ void clibpoll::listen(int listenport, polacceptcb acceptcb, LPVOID arg, char* li
 	this->addlog(epollogtype::eINFO, "%s() ok, listen port is %d.", __func__, this->m_listenport);
 }
 
-void clibpoll::setconnectcb(int event_id, polreadcb readcb, poleventcb eventcb, LPVOID arg)
+void clibpoll::setconnectcb(int event_id, polreadcb readcb, poleventcb eventcb, void* arg)
 {
 	LPPOL_PS_CTX _ctx = this->getctx(event_id);
 	if (_ctx == NULL) {
@@ -352,7 +351,7 @@ void clibpoll::setconnectcb(int event_id, polreadcb readcb, poleventcb eventcb, 
 	_ctx->arg = arg;
 }
 
-int clibpoll::createlistensocket(WORD port)
+int clibpoll::createlistensocket(unsigned short int port)
 {
 	sockaddr_in InternetAddr;
 	int nRet;
@@ -363,19 +362,23 @@ int clibpoll::createlistensocket(WORD port)
 
 	if (this->m_listensocket == SOCKET_ERROR)
 	{
-		this->addlog(epollogtype::eERROR, "%s(), WSASocket() failed with error %d.", __func__, WSAGetLastError());
+		this->addlog(epollogtype::eERROR, "%s(), WSASocket() failed with error %d.", __func__, SOCKERR);
 		return 0;
 	}
 	else
 	{
 		InternetAddr.sin_family = AF_INET;
+#ifdef _WIN32
 		InternetAddr.sin_addr.S_un.S_addr = htonl(this->m_listenip);
+#else
+		InternetAddr.sin_addr.s_addr = htonl(this->m_listenip);
+#endif
 		InternetAddr.sin_port = htons(port);
 		nRet = ::bind(this->m_listensocket, (sockaddr*)&InternetAddr, 16);
 
 		if (nRet == SOCKET_ERROR)
 		{
-			this->addlog(epollogtype::eERROR, "%s(), bind() failed with error %d.", __func__, WSAGetLastError());
+			this->addlog(epollogtype::eERROR, "%s(), bind() failed with error %d.", __func__, SOCKERR);
 			return 0;
 		}
 		else
@@ -383,7 +386,7 @@ int clibpoll::createlistensocket(WORD port)
 			nRet = ::listen(this->m_listensocket, 5);
 			if (nRet == SOCKET_ERROR)
 			{
-				this->addlog(epollogtype::eERROR, "%s(), listen() failed with error %d.", __func__, WSAGetLastError());
+				this->addlog(epollogtype::eERROR, "%s(), listen() failed with error %d.", __func__, SOCKERR);
 				return 0;
 			}
 			else
@@ -394,28 +397,31 @@ int clibpoll::createlistensocket(WORD port)
 	}
 }
 
-SOCKET clibpoll::createsocket(bool nonblocking)
+sock_t clibpoll::createsocket(bool nonblocking)
 {
-	SOCKET s = INVALID_SOCKET;
-	ULONG uNonBlockingMode = 1;
+	sock_t s = INVALID_SOCKET;
+	unsigned long uNonBlockingMode = 1;
+#ifdef _WIN32
 	s = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_IP, NULL, 0, NULL);
+#else
+	s = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+#endif
 	if (s == INVALID_SOCKET) {
-		this->addlog(epollogtype::eERROR, "%s(), WSASocket failed: %d.", __func__, WSAGetLastError());
+		this->addlog(epollogtype::eERROR, "%s(), WSASocket failed: %d.", __func__, SOCKERR);
 		return s;
 	}
-
 	if (nonblocking == true && ioctlsocket(s,
 		FIONBIO,
 		&uNonBlockingMode
 	) == SOCKET_ERROR) {
-		this->addlog(epollogtype::eERROR, "%s(), ioctlsocket failed: %d.", __func__, WSAGetLastError());
+		this->addlog(epollogtype::eERROR, "%s(), ioctlsocket failed: %d.", __func__, SOCKERR);
 		return INVALID_SOCKET;
 	}
 
 	return s;
 }
 
-bool clibpoll::sendbuffer(int event_id, LPBYTE lpMsg, DWORD dwSize)
+bool clibpoll::sendbuffer(int event_id, unsigned char* lpMsg, unsigned int dwSize)
 {
 	std::lock_guard<std::recursive_mutex> lk(m);
 	LPPOL_PS_CTX lpPerSocketContext = this->getctx(event_id);
@@ -445,9 +451,9 @@ bool clibpoll::sendbuffer(int event_id, LPBYTE lpMsg, DWORD dwSize)
 				this->addlog(epollogtype::eERROR, "%s(), event id %d pReallocCounts (1) is max out, 0x%x", __func__, event_id, POL_MAX_CONT_REALLOC_REQ);
 				::free(lpIoCtxt->pBuffer);
 				lpIoCtxt->pBufferLen = POL_MAX_IO_BUFFER_SIZE;
-				lpIoCtxt->pBuffer = (CHAR*)calloc(lpIoCtxt->pBufferLen, sizeof(CHAR));
+				lpIoCtxt->pBuffer = (char*)calloc(lpIoCtxt->pBufferLen, sizeof(char));
 				lpIoCtxt->pReallocCounts = 0;
-				this->close(event_id);
+				this->closeeventid(event_id);
 				return false;
 			}
 
@@ -457,11 +463,11 @@ bool clibpoll::sendbuffer(int event_id, LPBYTE lpMsg, DWORD dwSize)
 					break;
 			}
 
-			CHAR* tmpBuffer = (CHAR*)realloc(lpIoCtxt->pBuffer, lpIoCtxt->pBufferLen);
+			char* tmpBuffer = (char*)realloc(lpIoCtxt->pBuffer, lpIoCtxt->pBufferLen);
 
 			if (tmpBuffer == NULL) {
 				this->addlog(epollogtype::eERROR, "%s(), event id %d realloc (1) failed, requested size is %d.", __func__, event_id, lpIoCtxt->pBufferLen);
-				this->close(event_id);
+				this->closeeventid(event_id);
 				return false;
 			}
 
@@ -510,9 +516,9 @@ bool clibpoll::sendbuffer(int event_id, LPBYTE lpMsg, DWORD dwSize)
 				this->addlog(epollogtype::eERROR, "%s(), event id %d pReallocCounts (2) is max out, %d", __func__, event_id, POL_MAX_CONT_REALLOC_REQ);
 				::free(lpIoCtxt->pBuffer);
 				lpIoCtxt->pBufferLen = POL_MAX_IO_BUFFER_SIZE;
-				lpIoCtxt->pBuffer = (CHAR*)calloc(lpIoCtxt->pBufferLen, sizeof(CHAR));
+				lpIoCtxt->pBuffer = (char*)calloc(lpIoCtxt->pBufferLen, sizeof(char));
 				lpIoCtxt->pReallocCounts = 0;
-				this->close(event_id);
+				this->closeeventid(event_id);
 				return false;
 			}
 
@@ -522,11 +528,11 @@ bool clibpoll::sendbuffer(int event_id, LPBYTE lpMsg, DWORD dwSize)
 					break;
 			}
 
-			CHAR* tmpBuffer = (CHAR*)realloc(lpIoCtxt->pBuffer, lpIoCtxt->pBufferLen);
+			char* tmpBuffer = (char*)realloc(lpIoCtxt->pBuffer, lpIoCtxt->pBufferLen);
 
 			if (tmpBuffer == NULL) {
 				this->addlog(epollogtype::eERROR, "%s(), event id %d realloc (2) failed, requested size is %d.", __func__, event_id, lpIoCtxt->pBufferLen);
-				this->close(event_id);
+				this->closeeventid(event_id);
 				return false;
 			}
 
@@ -557,7 +563,7 @@ bool clibpoll::sendbuffer(int event_id, LPBYTE lpMsg, DWORD dwSize)
 bool clibpoll::connect(int event_id, char* initData, int initLen)
 {
 	struct sockaddr_in remote_address;
-	DWORD dwSentBytes = 0;
+	unsigned int dwSentBytes = 0;
 	std::lock_guard<std::recursive_mutex> lk(m);
 	LPPOL_PS_CTX pSocketContext = this->getctx(event_id);
 
@@ -571,12 +577,12 @@ bool clibpoll::connect(int event_id, char* initData, int initLen)
 	remote_address.sin_port = htons(pSocketContext->m_conport);
 	if (initLen > 0) {
 		this->addlog(epollogtype::eDEBUG, "%s(), initial buffer len is %d.", __func__, initLen);
-		this->sendbuffer(event_id, (LPBYTE)initData, initLen);
+		this->sendbuffer(event_id, (unsigned char*)initData, initLen);
 	}
 
-	if (::connect(pSocketContext->m_socket, (SOCKADDR*)&remote_address, sizeof(remote_address)) == SOCKET_ERROR) {
-		int error = WSAGetLastError();
-		if (WSAEWOULDBLOCK != error)
+	if (::connect(pSocketContext->m_socket, (sockaddr*)&remote_address, sizeof(remote_address)) == SOCKET_ERROR) {
+		int error = SOCKERR;
+		if (SOCKCONNBLOCK != error)
 		{
 			this->addlog(epollogtype::eERROR, "%s(), event id %d connect failed with error %d.", __func__, event_id, error);
 			return false;
@@ -584,16 +590,15 @@ bool clibpoll::connect(int event_id, char* initData, int initLen)
 	}
 
 	this->addlog(epollogtype::eDEBUG, "%s(), event id %d Port:%d succeeded.", __func__, event_id, pSocketContext->m_conport);
-	pSocketContext->m_lastconnecttick = GetTickCount();
 	return true;
 }
 
-int clibpoll::makeconnect(const char* ipaddr, WORD port, intptr_t index, LPPOL_PS_CTX ctx)
+int clibpoll::makeconnect(const char* ipaddr, unsigned short int port, intptr_t index, LPPOL_PS_CTX ctx)
 {
 	int nRet = 0;
-	DWORD bytes = 0;
-	DWORD Flags = 0;
-	DWORD initBufLen = 0;
+	unsigned int bytes = 0;
+	unsigned int Flags = 0;
+	unsigned int initBufLen = 0;
 	struct sockaddr_in addr;
 	struct sockaddr_in remote_address;
 
@@ -612,7 +617,7 @@ int clibpoll::makeconnect(const char* ipaddr, WORD port, intptr_t index, LPPOL_P
 		pSocketContext->clear();
 	}
 
-	SOCKET s = this->createsocket(true);
+	sock_t s = this->createsocket(true);
 
 	if (s == INVALID_SOCKET) {
 		this->addlog(epollogtype::eERROR, "%s(), createsocket failed.", __func__);
@@ -626,29 +631,29 @@ int clibpoll::makeconnect(const char* ipaddr, WORD port, intptr_t index, LPPOL_P
 	pSocketContext->m_socket = s;
 	pSocketContext->m_conport = port;
 	pSocketContext->m_eventid = event_id;
-	pSocketContext->m_type = (BYTE)epoliotype::eCONNECT_IO;
+	pSocketContext->m_type = (unsigned char)epoliotype::eCONNECT_IO;
 
 	struct hostent* h = gethostbyname(ipaddr);
-	pSocketContext->m_conipaddr = (h != NULL) ? ntohl(*(DWORD*)h->h_addr) : 0;
+	pSocketContext->m_conipaddr = (h != NULL) ? ntohl(*(unsigned int*)h->h_addr) : 0;
 	
 	if (this->m_customctx == false) {
-		pSocketContext->IOContext[1].pBuffer = (CHAR*)calloc(this->m_initsvrextbuffsize, sizeof(CHAR));
+		pSocketContext->IOContext[1].pBuffer = (char*)calloc(this->m_initsvrextbuffsize, sizeof(char));
 		pSocketContext->IOContext[1].pBufferLen = this->m_initsvrextbuffsize;
 	}
 
-	ZeroMemory(&addr, sizeof(addr));
-	ZeroMemory(&remote_address, sizeof(remote_address));
+	memset(&addr, 0, sizeof(addr));
+	memset(&remote_address, 0, sizeof(remote_address));
 
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = INADDR_ANY;
 	addr.sin_port = 0;
 
-	if (bind(s, (SOCKADDR*)&addr, sizeof(addr))) {
-		this->addlog(epollogtype::eERROR, "%s(), bind() failed: %d.", __func__, WSAGetLastError());
+	if (bind(s, (sockaddr*)&addr, sizeof(addr))) {
+		this->addlog(epollogtype::eERROR, "%s(), bind() failed: %d.", __func__, SOCKERR);
 		if (this->m_customctx == false) {
 			::free(pSocketContext->IOContext[1].pBuffer);
 		}
-		::closesocket(s);
+		closesocket(s);
 		delete pSocketContext;
 		return -1;
 	}
@@ -679,10 +684,10 @@ bool clibpoll::handleaccept()
 
 	std::lock_guard<std::recursive_mutex> lk(m);
 
-	SOCKET s = accept(this->m_listensocket, (struct sockaddr*)&peer_addr, &peer_addrlen);
+	sock_t s = accept(this->m_listensocket, (struct sockaddr*)&peer_addr, &peer_addrlen);
 
 	if (s == INVALID_SOCKET) {
-		this->addlog(epollogtype::eWARNING, "%s(), invalid socket, error %d.", __func__, WSAGetLastError());
+		this->addlog(epollogtype::eWARNING, "%s(), invalid sock_t, error %d.", __func__, SOCKERR);
 		return false;
 	}
 
@@ -690,7 +695,7 @@ bool clibpoll::handleaccept()
 		FIONBIO,
 		&uNonBlockingMode
 	) == SOCKET_ERROR) {
-		this->addlog(epollogtype::eERROR, "%s(), ioctlsocket failed: %d.", __func__, WSAGetLastError());
+		this->addlog(epollogtype::eERROR, "%s(), ioctlsocket failed: %d.", __func__, SOCKERR);
 		return false;
 	}
 
@@ -708,18 +713,18 @@ bool clibpoll::handleaccept()
 
 		if (event_id == -1) {
 			this->addlog(epollogtype::eWARNING, "%s(), no available event id.", __func__);
-			::closesocket(s);
+			closesocket(s);
 			delete lpAcceptSocketContext;
 			return false;
 		}
 
 		memcpy(lpAcceptSocketContext->m_ipaddr, strIP, sizeof(lpAcceptSocketContext->m_ipaddr));
 		if (this->m_customctx == false) {
-			lpAcceptSocketContext->IOContext[1].pBuffer = (CHAR*)calloc(this->m_initcltextbuffsize, sizeof(CHAR));
+			lpAcceptSocketContext->IOContext[1].pBuffer = (char*)calloc(this->m_initcltextbuffsize, sizeof(char));
 			lpAcceptSocketContext->IOContext[1].pBufferLen = this->m_initcltextbuffsize;
 		}
 		lpAcceptSocketContext->m_socket = s;
-		lpAcceptSocketContext->m_type = (BYTE)epoliotype::eRECV_IO | (BYTE)epoliotype::eSEND_IO;
+		lpAcceptSocketContext->m_type = (unsigned char)epoliotype::eRECV_IO | (unsigned char)epoliotype::eSEND_IO;
 		lpAcceptSocketContext->_this = this;
 		lpAcceptSocketContext->m_connected = true;
 		lpAcceptSocketContext->m_eventid = event_id;
@@ -729,7 +734,7 @@ bool clibpoll::handleaccept()
 	else {
 		if (event_id == -1) {
 			this->addlog(epollogtype::eWARNING, "%s(), no available event id.", __func__);
-			::closesocket(s);
+			closesocket(s);
 			return false;
 		}
 	}
@@ -744,7 +749,7 @@ bool clibpoll::handleaccept()
 
 	if (!this->m_acceptcb(this, event_id, this->m_acceptarg)) {
 		this->addlog(epollogtype::eWARNING, "%s(), Accept Callback returned false.", __func__);
-		this->close(event_id);
+		this->closeeventid(event_id);
 		return false;
 	}
 
@@ -758,17 +763,17 @@ bool clibpoll::handleaccept()
 
 		memcpy(lpAcceptSocketContext->m_ipaddr, strIP, sizeof(lpAcceptSocketContext->m_ipaddr));
 		if (this->m_customctx == false) {
-			lpAcceptSocketContext->IOContext[1].pBuffer = (CHAR*)calloc(this->m_initcltextbuffsize, sizeof(CHAR));
+			lpAcceptSocketContext->IOContext[1].pBuffer = (char*)calloc(this->m_initcltextbuffsize, sizeof(char));
 			lpAcceptSocketContext->IOContext[1].pBufferLen = this->m_initcltextbuffsize;
 		}
 		lpAcceptSocketContext->m_socket = s;
-		lpAcceptSocketContext->m_type = (BYTE)epoliotype::eRECV_IO | (BYTE)epoliotype::eSEND_IO;
+		lpAcceptSocketContext->m_type = (unsigned char)epoliotype::eRECV_IO | (unsigned char)epoliotype::eSEND_IO;
 		lpAcceptSocketContext->_this = this;
 		lpAcceptSocketContext->m_eventid = event_id;
 		lpAcceptSocketContext->m_connected = true;
 	}
 
-	this->addlog(epollogtype::eDEBUG, "%s(), event id %d socket:%d accepted.", __func__, event_id, lpAcceptSocketContext->m_socket);
+	this->addlog(epollogtype::eDEBUG, "%s(), event id %d sock_t:%d accepted.", __func__, event_id, lpAcceptSocketContext->m_socket);
 
 	if(lpAcceptSocketContext->eventcb != NULL)
 		lpAcceptSocketContext->eventcb(this, event_id, epolstatus::eCONNECTED, lpAcceptSocketContext->arg);
@@ -777,7 +782,7 @@ bool clibpoll::handleaccept()
 
 bool clibpoll::handleconnect(LPPOL_PS_CTX ctx)
 {
-	DWORD Flags = 0;
+	unsigned int Flags = 0;
 	std::lock_guard<std::recursive_mutex> lk(m);
 
 	int event_id = ctx->m_eventid;
@@ -785,12 +790,12 @@ bool clibpoll::handleconnect(LPPOL_PS_CTX ctx)
 
 	if (lpIOContext == NULL) {
 		this->addlog(epollogtype::eERROR, "%s(), event id %d lpIOContext is NULL.", __func__, event_id);
-		this->close(event_id, epolstatus::eSOCKERROR);
+		this->closeeventid(event_id, epolstatus::eSOCKERROR);
 		return false;
 	}
 
 	ctx->m_connected = true;
-	ctx->m_type = (BYTE)epoliotype::eRECV_IO | (BYTE)epoliotype::eSEND_IO;
+	ctx->m_type = (unsigned char)epoliotype::eRECV_IO | (unsigned char)epoliotype::eSEND_IO;
 
 	if (ctx->eventcb != NULL) {
 		ctx->eventcb(this, event_id, epolstatus::eCONNECTED, ctx->arg);
@@ -799,7 +804,7 @@ bool clibpoll::handleconnect(LPPOL_PS_CTX ctx)
 		}
 	}
 
-	this->addlog(epollogtype::eDEBUG, "%s(), event id %d Socket:%d connected.", __func__, event_id, (int)ctx->m_socket);
+	this->addlog(epollogtype::eDEBUG, "%s(), event id %d sock_t:%d connected.", __func__, event_id, (int)ctx->m_socket);
 	return true;
 }
 
@@ -816,7 +821,7 @@ int clibpoll::handlereceive(LPPOL_PS_CTX ctx)
 
 	if (size <= 0) {
 		if (size == SOCKET_ERROR) {
-			this->addlog(epollogtype::eDEBUG, "%s, event id %d recv error %d.", __func__, (int)eventid, WSAGetLastError());
+			this->addlog(epollogtype::eDEBUG, "%s, event id %d recv error %d.", __func__, (int)eventid, SOCKERR);
 		}
 		return size;
 	}
@@ -824,7 +829,7 @@ int clibpoll::handlereceive(LPPOL_PS_CTX ctx)
 	lpIOContext->nSentBytes += size;
 
 	if (ctx->recvcb != NULL && !ctx->recvcb(this, eventid, ctx->arg)) { // receive callback
-		this->addlog(epollogtype::eERROR, "%s(), event id %d Socket Header error %d", __func__, eventid, WSAGetLastError());
+		this->addlog(epollogtype::eERROR, "%s(), event id %d sock_t Header error %d", __func__, eventid, SOCKERR);
 		return 0;
 	}
 
@@ -846,7 +851,7 @@ bool clibpoll::handlesend(LPPOL_PS_CTX ctx)
 			ctx->IOContext[1].nTotalBytes = 0;
 			ctx->IOContext[1].nSecondOfs = 0;
 			ctx->IOContext[1].nWaitIO = 0;
-			this->addlog(epollogtype::eDEBUG, "%s, event id %d send error %d.", __func__, (int)ctx->m_eventid, WSAGetLastError());
+			this->addlog(epollogtype::eDEBUG, "%s, event id %d send error %d.", __func__, (int)ctx->m_eventid, SOCKERR);
 			return false;
 		}
 		this->addlog(epollogtype::eDEBUG, "%s, event id %d sent %d bytes (1)", __func__, (int)ctx->m_eventid, ctx->IOContext[1].nTotalBytes);
@@ -902,7 +907,7 @@ size_t clibpoll::readbuffer(int event_id, char* buffer, size_t buffersize)
 	return readbytes;
 }
 
-void clibpoll::closesocket(int event_id)
+void clibpoll::closefd(int event_id)
 {
 	std::lock_guard<std::recursive_mutex> lk(m);
 	LPPOL_PS_CTX ctx = this->getctx(event_id);
@@ -913,7 +918,7 @@ void clibpoll::closesocket(int event_id)
 	}
 
 	if (ctx->m_socket != INVALID_SOCKET) {
-		::closesocket(ctx->m_socket);
+		closesocket(ctx->m_socket);
 		ctx->m_socket = INVALID_SOCKET;
 
 		if (ctx->eventcb != NULL)
@@ -921,10 +926,10 @@ void clibpoll::closesocket(int event_id)
 	}
 }
 
-void clibpoll::close(int event_id, epolstatus flag)
+void clibpoll::closeeventid(int event_id, epolstatus flag)
 {
 	if (flag == epolstatus::eCLOSED) {
-		this->closesocket(event_id);
+		this->closefd(event_id);
 		return;
 	}
 
@@ -938,12 +943,12 @@ void clibpoll::close(int event_id, epolstatus flag)
 	}
 
 	if (ctx->m_socket != INVALID_SOCKET) {
-		::closesocket(ctx->m_socket);
+		closesocket(ctx->m_socket);
 		ctx->m_socket = INVALID_SOCKET;
 	}
 
 	poleventcb eventcb = ctx->eventcb;
-	LPVOID eventcb_arg = ctx->arg;
+	void* eventcb_arg = ctx->arg;
 
 	this->remove(event_id);
 
@@ -956,26 +961,30 @@ void clibpoll::addlog(epollogtype type, const char* msg, ...)
 	char szBuffer[1024] = { 0 };
 	va_list pArguments;
 
-	if (((DWORD)type & this->m_logverboseflags) != (DWORD)type)
+	if (((unsigned int)type & this->m_logverboseflags) != (unsigned int)type)
 		return;
 
 	if (this->fnc_loghandler == NULL) {
-		sprintf(szBuffer, "[clibpoll] (%d) ", type);
+		sprintf(szBuffer, "[libpoll] (%d) ", type);
 		va_start(pArguments, msg);
 		size_t iSize = strlen(szBuffer);
-		vsprintf_s(&szBuffer[iSize], 1024 - iSize, msg, pArguments);
+		vsprintf(&szBuffer[iSize], msg, pArguments);
 		va_end(pArguments);
+#ifdef _WIN32
 		OutputDebugStringA(szBuffer);
+#else
+		printf("%s\n", szBuffer);
+#endif
 	}
 	else {
 		va_start(pArguments, msg);
-		vsprintf_s(szBuffer, 1024, msg, pArguments);
+		vsprintf(szBuffer, msg, pArguments);
 		va_end(pArguments);
 		this->fnc_loghandler(type, szBuffer);
 	}
 }
 
-SOCKET clibpoll::getsocket(int event_id) {
+sock_t clibpoll::getsocket(int event_id) {
 	LPPOL_PS_CTX _ctx = this->getctx(event_id); 
 	if (_ctx == NULL)
 		return -1;

@@ -4,7 +4,7 @@
 */
 #define _LIBPOLL_MAJOR_VER_ 0x01
 #define _LIBPOLL_MINOR_VER_ 0x00
-#define _LIBPOLL_PATCH_VER_ 0x02
+#define _LIBPOLL_PATCH_VER_ 0x01
 
 /*
  * MIT License
@@ -66,7 +66,7 @@ typedef WSAPOLLFD _pollfd;
 #define SOCKCONNBLOCK EINPROGRESS
 #define SOCKCONNREFUSED ECONNREFUSED
 #define SOCKERR errno
-#define INVALID_SOCKET -1
+#define INVALID_SOCKET 0
 #define SOCKET_ERROR -1
 typedef int sock_t;
 typedef pollfd _pollfd;
@@ -294,7 +294,7 @@ private:
 	bool handleconnect(LPPOL_PS_CTX ctx);
 	int handlereceive(LPPOL_PS_CTX ctx);
 	bool handlesend(LPPOL_PS_CTX ctx);
-	void closeeventid(int event_id, epolstatus flag = epolstatus::eCLOSED);
+	void close(int event_id, epolstatus flag = epolstatus::eCLOSED);
 	void clear();
 	void remove(int event_id);
 
