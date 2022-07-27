@@ -18,7 +18,7 @@ int main()
 {
     SetConsoleCtrlHandler(signalhandler, TRUE);
 
-    polbase* base = polnewbase(logger, (DWORD)epollogtype::eALL);
+    polbase* base = polnewbase(logger);
     gbase = base;
     pollisten(base, 3000, acceptcb, NULL);
 
@@ -36,7 +36,7 @@ int main()
 /**accept callback, returing false in this callback will close the client*/
 static bool acceptcb(polbase* base, int eventid, LPVOID arg)
 {
-    /**client connection accepted, we should store the MUE object here to our variable..*/
+    /**client connection accepted, we should store the pol eventid here to our variable..*/
 
     /**set read and event callback to newly accepted client*/
     polsetcb(base, eventid, readcb, eventcb, NULL);
@@ -54,7 +54,6 @@ static bool readcb(polbase* base, int eventid, LPVOID arg)
     std::cout << "Client message : " << buff << "\n";
 
     polwrite(base, eventid, (LPBYTE)buff, readsize); /**echo the received data from client*/
-
 
     return true;
 }

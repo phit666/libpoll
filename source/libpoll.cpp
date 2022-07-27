@@ -180,7 +180,7 @@ void clibpoll::init(polloghandler loghandler, DWORD logverboseflags, size_t init
 	this->m_logverboseflags = (logverboseflags != (DWORD)-1) ? logverboseflags : this->m_logverboseflags;
 	this->fnc_loghandler = (loghandler != NULL) ? loghandler : this->fnc_loghandler;
 
-	this->addlog(epollogtype::eDEBUG, "clibpoll version %02d.%02d.%02d", _LIBPOLL_MAJOR_VER_, _LIBPOLL_MINOR_VER_, _LIBPOLL_PATCH_VER_);
+	this->addlog(epollogtype::eDEBUG, "libpoll version %02d.%02d.%02d", _LIBPOLL_MAJOR_VER_, _LIBPOLL_MINOR_VER_, _LIBPOLL_PATCH_VER_);
 
 	err = WSAStartup(wVersionRequested, &wsaData);
 
@@ -211,7 +211,6 @@ void clibpoll::dispatch()
 	while (true) {
 		if (this->m_loopbreak)
 			break;
-		//if(this->m_rebuildpollfdarr)
 		this->makepollfdarr();
 		if (this->m_pollfdcounts == 0) {
 			Sleep(1000);
@@ -225,33 +224,39 @@ void clibpoll::dispatch()
 		if (err > 0) {
 			for (int n = 0; n < this->m_pollfdcounts; n++) {
 
-				//this->addlog(epollogtype::eDEBUG, "WSAPOLL, event id %d...", this->m_pollfdarr[n].fd);
-
 				if (this->m_pollfdarr[n].fd == INVALID_SOCKET || this->m_pollfdarr[n].revents == 0)
 					continue;
 				
 				LPPOL_PS_CTX ctx = this->getctx(this->m_pollfdarr[n].fd);
 
+				//this->addlog(epollogtype::eDEBUG, "%s, event id %d revents: %d.", __func__, this->m_pollfdarr[n].fd, this->m_pollfdarr[n].revents);
+
 				if (ctx == NULL) {
-					this->addlog(epollogtype::eDEBUG, "WSAPOLL, event id %d ctx is NULL.", this->m_pollfdarr[n].fd);
+					this->addlog(epollogtype::eDEBUG, "%s, event id %d ctx is NULL.", __func__, this->m_pollfdarr[n].fd);
 					continue;
 				}
 
 				if (this->m_pollfdarr[n].revents & POLLHUP) {
 					this->close((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
-					this->addlog(epollogtype::eDEBUG, "WSAPOLL, event id %d POLLHUP", this->m_pollfdarr[n].fd);
+					this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLHUP.", __func__, this->m_pollfdarr[n].fd);
 					continue;
 				}
 
 				if (this->m_pollfdarr[n].revents & POLLERR) {
 					this->close((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
-					this->addlog(epollogtype::eDEBUG, "WSAPOLL, event id %d POLLERR", this->m_pollfdarr[n].fd);
+					this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLERR.", __func__, this->m_pollfdarr[n].fd);
+					continue;
+				}
+
+				if (this->m_pollfdarr[n].revents & POLLNVAL) {
+					this->close((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
+					this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLNVAL.", __func__, this->m_pollfdarr[n].fd);
 					continue;
 				}
 
 				if (this->m_pollfdarr[n].revents & POLLRDNORM) {
 					if ((ctx->m_type & (BYTE)epoliotype::eACCEPT_IO) == (BYTE)epoliotype::eACCEPT_IO) {
-						this->addlog(epollogtype::eDEBUG, "WSAPOLL, event id %d eACCEPT_IO", this->m_pollfdarr[n].fd);
+						this->addlog(epollogtype::eDEBUG, "%s, event id %d eACCEPT_IO", __func__, this->m_pollfdarr[n].fd);
 						this->handleaccept();
 						continue;
 					}
@@ -259,26 +264,25 @@ void clibpoll::dispatch()
 
 				if (this->m_pollfdarr[n].revents & POLLWRNORM) {
 					if ((ctx->m_type & (BYTE)epoliotype::eCONNECT_IO) == (BYTE)epoliotype::eCONNECT_IO) {
-						this->addlog(epollogtype::eDEBUG, "WSAPOLL, event id %d eCONNECT_IO", this->m_pollfdarr[n].fd);
+						this->addlog(epollogtype::eDEBUG, "%s, event id %d eCONNECT_IO", __func__, this->m_pollfdarr[n].fd);
 						this->handleconnect(ctx);
 						continue;
 					}
 				}
 
 				if ((this->m_pollfdarr[n].revents & POLLIN) && ((ctx->m_type & (BYTE)epoliotype::eRECV_IO) == (BYTE)epoliotype::eRECV_IO)) {
-					int size = recv(this->m_pollfdarr[n].fd, ctx->IOContext[0].Buffer, POL_MAX_IO_BUFFER_SIZE, 0);
-					this->addlog(epollogtype::eDEBUG, "WSAPOLL, event id %d received %d bytes", this->m_pollfdarr[n].fd, size);
-					if (size > 0) {
-						this->handlereceive(ctx, size);
-					}
-					else {
+					if (!this->handlereceive(ctx)) {
 						this->close((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
+						this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLIN.", __func__, this->m_pollfdarr[n].fd);
 						continue;
 					}
 				}
 
 				if (this->m_pollfdarr[n].revents & POLLOUT && ((ctx->m_type & (BYTE)epoliotype::eSEND_IO) == (BYTE)epoliotype::eSEND_IO)) {
-					this->handlesend(ctx);
+					if (!this->handlesend(ctx)) {
+						this->close((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
+						this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLOUT.", __func__, this->m_pollfdarr[n].fd);
+					}
 				}
 			}
 		}
@@ -799,27 +803,38 @@ bool clibpoll::handleconnect(LPPOL_PS_CTX ctx)
 	return true;
 }
 
-bool clibpoll::handlereceive(LPPOL_PS_CTX ctx, DWORD dwIoSize)
+int clibpoll::handlereceive(LPPOL_PS_CTX ctx)
 {
 	std::lock_guard<std::recursive_mutex> lk(m);
 
 	LPPOL_PIO_CTX	lpIOContext = (LPPOL_PIO_CTX)&ctx->IOContext[0];
 	int eventid = ctx->m_eventid;
 
-	lpIOContext->nSentBytes += dwIoSize;
+	int size = recv(ctx->m_socket, ctx->IOContext[0].Buffer, POL_MAX_IO_BUFFER_SIZE, 0);
+
+	this->addlog(epollogtype::eDEBUG, "%s, event id %d received %d bytes", __func__, eventid, size);
+
+	if (size <= 0) {
+		if (size == SOCKET_ERROR) {
+			this->addlog(epollogtype::eDEBUG, "%s, event id %d recv error %d.", __func__, (int)eventid, WSAGetLastError());
+		}
+		return size;
+	}
+
+	lpIOContext->nSentBytes += size;
+
 	if (ctx->recvcb != NULL && !ctx->recvcb(this, eventid, ctx->arg)) { // receive callback
 		this->addlog(epollogtype::eERROR, "%s(), event id %d Socket Header error %d", __func__, eventid, WSAGetLastError());
-		this->close(eventid, epolstatus::eSOCKERROR);
-		return false;
+		return 0;
 	}
 
 	if (!this->iseventidvalid(eventid)) {
 		this->addlog(epollogtype::eWARNING, "%s(), event id %d is invalid.", __func__, eventid);
-		return false;
+		return 0;
 	}
 
 	lpIOContext->nWaitIO = 0;
-	return true;
+	return size;
 }
 
 bool clibpoll::handlesend(LPPOL_PS_CTX ctx)
@@ -831,7 +846,7 @@ bool clibpoll::handlesend(LPPOL_PS_CTX ctx)
 			ctx->IOContext[1].nTotalBytes = 0;
 			ctx->IOContext[1].nSecondOfs = 0;
 			ctx->IOContext[1].nWaitIO = 0;
-			this->close((int)ctx->m_eventid, epolstatus::eSOCKERROR);
+			this->addlog(epollogtype::eDEBUG, "%s, event id %d send error %d.", __func__, (int)ctx->m_eventid, WSAGetLastError());
 			return false;
 		}
 		this->addlog(epollogtype::eDEBUG, "%s, event id %d sent %d bytes (1)", __func__, (int)ctx->m_eventid, ctx->IOContext[1].nTotalBytes);

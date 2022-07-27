@@ -4,7 +4,7 @@
 */
 #define _LIBPOLL_MAJOR_VER_ 0x01
 #define _LIBPOLL_MINOR_VER_ 0x00
-#define _LIBPOLL_PATCH_VER_ 0x00
+#define _LIBPOLL_PATCH_VER_ 0x01
 
 /*
  * MIT License
@@ -262,7 +262,7 @@ private:
 
 	bool handleaccept();
 	bool handleconnect(LPPOL_PS_CTX ctx);
-	bool handlereceive(LPPOL_PS_CTX ctx, DWORD dwIoSize);
+	int handlereceive(LPPOL_PS_CTX ctx);
 	bool handlesend(LPPOL_PS_CTX ctx);
 	void close(int event_id, epolstatus flag = epolstatus::eCLOSED);
 	void clear();

@@ -21,7 +21,7 @@ polbase* gbase = NULL;
 
 int main(int argc, char* argv[])
 {
-    printf("MuEngine Proxy-Server Version 1.00.00\n");
+    printf("libpoll Proxy-Server Version 1.00.00\n");
 
     if (argc < 4) {
         std::cout << std::endl;
