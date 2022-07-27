@@ -1,0 +1,70 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.32602.291
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "echo-server", "..\echo-server\echo-server.vcxproj", "{1A41187B-B1B1-49F1-814D-4649BE762033}"
+	ProjectSection(ProjectDependencies) = postProject
+		{61305FB1-69D5-4A14-B1BD-0D7CDD6B8D86} = {61305FB1-69D5-4A14-B1BD-0D7CDD6B8D86}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "echo-client", "..\echo-client\echo-client.vcxproj", "{302AB1FC-56DA-46E4-A6D0-D994824ACA0D}"
+	ProjectSection(ProjectDependencies) = postProject
+		{61305FB1-69D5-4A14-B1BD-0D7CDD6B8D86} = {61305FB1-69D5-4A14-B1BD-0D7CDD6B8D86}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "proxy-server", "..\proxy-server\proxy-server.vcxproj", "{230429EF-A46F-4D13-9513-DE9BAF894CFA}"
+	ProjectSection(ProjectDependencies) = postProject
+		{61305FB1-69D5-4A14-B1BD-0D7CDD6B8D86} = {61305FB1-69D5-4A14-B1BD-0D7CDD6B8D86}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libpoll", "libpoll.vcxproj", "{61305FB1-69D5-4A14-B1BD-0D7CDD6B8D86}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1A41187B-B1B1-49F1-814D-4649BE762033}.Debug|x64.ActiveCfg = Debug|x64
+		{1A41187B-B1B1-49F1-814D-4649BE762033}.Debug|x64.Build.0 = Debug|x64
+		{1A41187B-B1B1-49F1-814D-4649BE762033}.Debug|x86.ActiveCfg = Debug|Win32
+		{1A41187B-B1B1-49F1-814D-4649BE762033}.Debug|x86.Build.0 = Debug|Win32
+		{1A41187B-B1B1-49F1-814D-4649BE762033}.Release|x64.ActiveCfg = Release|x64
+		{1A41187B-B1B1-49F1-814D-4649BE762033}.Release|x64.Build.0 = Release|x64
+		{1A41187B-B1B1-49F1-814D-4649BE762033}.Release|x86.ActiveCfg = Release|Win32
+		{1A41187B-B1B1-49F1-814D-4649BE762033}.Release|x86.Build.0 = Release|Win32
+		{302AB1FC-56DA-46E4-A6D0-D994824ACA0D}.Debug|x64.ActiveCfg = Debug|x64
+		{302AB1FC-56DA-46E4-A6D0-D994824ACA0D}.Debug|x64.Build.0 = Debug|x64
+		{302AB1FC-56DA-46E4-A6D0-D994824ACA0D}.Debug|x86.ActiveCfg = Debug|Win32
+		{302AB1FC-56DA-46E4-A6D0-D994824ACA0D}.Debug|x86.Build.0 = Debug|Win32
+		{302AB1FC-56DA-46E4-A6D0-D994824ACA0D}.Release|x64.ActiveCfg = Release|x64
+		{302AB1FC-56DA-46E4-A6D0-D994824ACA0D}.Release|x64.Build.0 = Release|x64
+		{302AB1FC-56DA-46E4-A6D0-D994824ACA0D}.Release|x86.ActiveCfg = Release|Win32
+		{302AB1FC-56DA-46E4-A6D0-D994824ACA0D}.Release|x86.Build.0 = Release|Win32
+		{230429EF-A46F-4D13-9513-DE9BAF894CFA}.Debug|x64.ActiveCfg = Debug|x64
+		{230429EF-A46F-4D13-9513-DE9BAF894CFA}.Debug|x64.Build.0 = Debug|x64
+		{230429EF-A46F-4D13-9513-DE9BAF894CFA}.Debug|x86.ActiveCfg = Debug|Win32
+		{230429EF-A46F-4D13-9513-DE9BAF894CFA}.Debug|x86.Build.0 = Debug|Win32
+		{230429EF-A46F-4D13-9513-DE9BAF894CFA}.Release|x64.ActiveCfg = Release|x64
+		{230429EF-A46F-4D13-9513-DE9BAF894CFA}.Release|x64.Build.0 = Release|x64
+		{230429EF-A46F-4D13-9513-DE9BAF894CFA}.Release|x86.ActiveCfg = Release|Win32
+		{230429EF-A46F-4D13-9513-DE9BAF894CFA}.Release|x86.Build.0 = Release|Win32
+		{61305FB1-69D5-4A14-B1BD-0D7CDD6B8D86}.Debug|x64.ActiveCfg = Debug|x64
+		{61305FB1-69D5-4A14-B1BD-0D7CDD6B8D86}.Debug|x64.Build.0 = Debug|x64
+		{61305FB1-69D5-4A14-B1BD-0D7CDD6B8D86}.Debug|x86.ActiveCfg = Debug|Win32
+		{61305FB1-69D5-4A14-B1BD-0D7CDD6B8D86}.Debug|x86.Build.0 = Debug|Win32
+		{61305FB1-69D5-4A14-B1BD-0D7CDD6B8D86}.Release|x64.ActiveCfg = Release|x64
+		{61305FB1-69D5-4A14-B1BD-0D7CDD6B8D86}.Release|x64.Build.0 = Release|x64
+		{61305FB1-69D5-4A14-B1BD-0D7CDD6B8D86}.Release|x86.ActiveCfg = Release|Win32
+		{61305FB1-69D5-4A14-B1BD-0D7CDD6B8D86}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {F05923A6-B184-4BE0-850C-E49633EE6E4C}
+	EndGlobalSection
+EndGlobal
