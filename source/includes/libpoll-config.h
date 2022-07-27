@@ -21,6 +21,11 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
+ /**
+	 @file libpoll-config.h
+ */
+
 #pragma once
 
 #define POL_MAX_IO_BUFFER_SIZE		8192

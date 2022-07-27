@@ -1,18 +1,18 @@
 #include <iostream>
 #include <libpoll-wrapper.h>
-#include <conio.h>
-#include <signal.h>
+#include <csignal>
+#include <iostream>
 #include <stdlib.h>
 #include <stdio.h>
 #include <sstream>
 
 
 static void logger(epollogtype type, const char* msg);
-static bool acceptcb(polbase* base, int eventid, LPVOID arg);
-static bool readcb(polbase* base, int eventid, LPVOID arg);
-static bool remote_readcb(polbase* base, int eventid, LPVOID arg);
+static bool acceptcb(polbase* base, int eventid, void* arg);
+static bool readcb(polbase* base, int eventid, void* arg);
+static bool remote_readcb(polbase* base, int eventid, void* arg);
+static void signal_handler(int signal);
 
-static BOOL WINAPI signalhandler(DWORD signum);
 static int portProxy;
 static int portServer;
 static char proxyip[50] = { 0 };
@@ -21,7 +21,7 @@ polbase* gbase = NULL;
 
 int main(int argc, char* argv[])
 {
-    printf("libpoll Proxy-Server Version 1.00.00\n");
+    std::cout << "libpoll Proxy-Server" << std::endl;
 
     if (argc < 4) {
         std::cout << std::endl;
@@ -32,7 +32,7 @@ int main(int argc, char* argv[])
         return -1;
     }
 
-    SetConsoleCtrlHandler(signalhandler, TRUE);
+    std::signal(SIGINT, signal_handler);
 
     std::stringstream s;
     s << argv[2]; s >> portProxy; s.clear();
@@ -45,23 +45,23 @@ int main(int argc, char* argv[])
     pollisten(base, portProxy, acceptcb, NULL, proxyip);
     poldispatch(base);
     polbasedelete(base);
-    return _getch();
+    return 1;
 }
 
-static bool acceptcb(polbase* base, int eventid, LPVOID arg)
+static bool acceptcb(polbase* base, int eventid, void* arg)
 {
     int event_id = polmakeconnect(base, svrip, portServer); // create the event id of remote connection
 
     intptr_t _event_id = static_cast<intptr_t>(event_id);
-    polsetcb(base, eventid, readcb, NULL, (LPVOID)_event_id); // pass remote event id to client callback
+    polsetcb(base, eventid, readcb, NULL, (void*)_event_id); // pass remote event id to client callback
 
     intptr_t _eventid = static_cast<intptr_t>(eventid);
-    polsetcb(base, event_id, remote_readcb, NULL, (LPVOID)_eventid); // pass proxy event id to remote callback
+    polsetcb(base, event_id, remote_readcb, NULL, (void*)_eventid); // pass proxy event id to remote callback
 
     return true;
 }
 
-static bool readcb(polbase* base, int eventid, LPVOID arg)
+static bool readcb(polbase* base, int eventid, void* arg)
 {
     intptr_t ptr = (intptr_t)arg;
     int remote_eventid = static_cast<int>(ptr);
@@ -76,11 +76,11 @@ static bool readcb(polbase* base, int eventid, LPVOID arg)
         return polconnect(base, remote_eventid, buf, size); // connect to remote and send initial buffer
     }
     else {
-        return polwrite(base, remote_eventid, (LPBYTE)buf, size);
+        return polwrite(base, remote_eventid, (unsigned char*)buf, size);
     }
 }
 
-static bool remote_readcb(polbase* base, int eventid, LPVOID arg)
+static bool remote_readcb(polbase* base, int eventid, void* arg)
 {
     intptr_t ptr = (intptr_t)arg;
     int local_eventid = static_cast<int>(ptr);
@@ -91,18 +91,7 @@ static bool remote_readcb(polbase* base, int eventid, LPVOID arg)
     if (size == 0)
         return false;
 
-    return polwrite(base, local_eventid, (LPBYTE)buf, size);
-}
-
-static BOOL WINAPI signalhandler(DWORD signum)
-{
-    switch (signum)
-    {
-    case CTRL_C_EVENT:
-        poldispatchbreak(gbase); /**we will return dispatch upon Ctrl-C*/
-        break;
-    }
-    return TRUE;
+    return polwrite(base, local_eventid, (unsigned char*)buf, size);
 }
 
 static void logger(epollogtype type, const char* msg)
@@ -123,13 +112,7 @@ static void logger(epollogtype type, const char* msg)
     }
 }
 
-// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
-// Debug program: F5 or Debug > Start Debugging menu
-
-// Tips for Getting Started: 
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
+static void signal_handler(int signal)
+{
+    poldispatchbreak(gbase); /**we will return dispatch upon Ctrl-C*/
+}

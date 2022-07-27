@@ -1,10 +1,5 @@
 #include <libpoll-wrapper.h>
 #include <iostream>
-
-#ifdef _WIN32
-#include <conio.h>
-#endif
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <csignal>

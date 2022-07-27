@@ -490,37 +490,12 @@ bool clibpoll::sendbuffer(int event_id, unsigned char* lpMsg, unsigned int dwSiz
 
 	lpIoCtxt->nTotalBytes = 0;
 
-	if (lpIoCtxt->nSecondOfs > 0)
-	{
-		if (lpIoCtxt->nSecondOfs <= POL_MAX_IO_BUFFER_SIZE) {
-			memcpy(lpIoCtxt->Buffer, lpIoCtxt->pBuffer, lpIoCtxt->nSecondOfs);
-			lpIoCtxt->nTotalBytes = lpIoCtxt->nSecondOfs;
-			lpIoCtxt->nSecondOfs = 0;
-		}
-		else {
-			memcpy(lpIoCtxt->Buffer, lpIoCtxt->pBuffer, POL_MAX_IO_BUFFER_SIZE);
-			lpIoCtxt->nTotalBytes = POL_MAX_IO_BUFFER_SIZE;
-			lpIoCtxt->nSecondOfs -= POL_MAX_IO_BUFFER_SIZE;
-			memcpy(lpIoCtxt->pBuffer, &lpIoCtxt->pBuffer[POL_MAX_IO_BUFFER_SIZE], lpIoCtxt->nSecondOfs);
-		}
-	}
-
 	if ((lpIoCtxt->nTotalBytes + dwSize) > POL_MAX_IO_BUFFER_SIZE)
 	{
 		int bufflen = (lpIoCtxt->nTotalBytes + dwSize) - POL_MAX_IO_BUFFER_SIZE; // 808
 		int difflen = POL_MAX_IO_BUFFER_SIZE - lpIoCtxt->nTotalBytes; // 192
 
 		if ((lpIoCtxt->nSecondOfs + bufflen) > lpIoCtxt->pBufferLen) {
-
-			if (lpIoCtxt->pReallocCounts >= POL_MAX_CONT_REALLOC_REQ) {
-				this->addlog(epollogtype::eERROR, "%s(), event id %d pReallocCounts (2) is max out, %d", __func__, event_id, POL_MAX_CONT_REALLOC_REQ);
-				::free(lpIoCtxt->pBuffer);
-				lpIoCtxt->pBufferLen = POL_MAX_IO_BUFFER_SIZE;
-				lpIoCtxt->pBuffer = (char*)calloc(lpIoCtxt->pBufferLen, sizeof(char));
-				lpIoCtxt->pReallocCounts = 0;
-				this->closeeventid(event_id);
-				return false;
-			}
 
 			while (true) {
 				lpIoCtxt->pBufferLen *= 2;
@@ -848,15 +823,13 @@ bool clibpoll::handlesend(LPPOL_PS_CTX ctx)
 
 	if (ctx->IOContext[1].nTotalBytes > 0) {
 		if (send(ctx->m_socket, ctx->IOContext[1].Buffer, ctx->IOContext[1].nTotalBytes, 0) == SOCKET_ERROR) {
-			ctx->IOContext[1].nTotalBytes = 0;
-			ctx->IOContext[1].nSecondOfs = 0;
-			ctx->IOContext[1].nWaitIO = 0;
 			this->addlog(epollogtype::eDEBUG, "%s, event id %d send error %d.", __func__, (int)ctx->m_eventid, SOCKERR);
 			return false;
 		}
 		this->addlog(epollogtype::eDEBUG, "%s, event id %d sent %d bytes (1)", __func__, (int)ctx->m_eventid, ctx->IOContext[1].nTotalBytes);
 		ctx->IOContext[1].nTotalBytes = 0;
 		ctx->IOContext[1].pReallocCounts = 0;
+		ctx->IOContext[1].nWaitIO = 0;
 		ctx->m_pendingsend = false;
 	}
 	if (ctx->IOContext[1].nSecondOfs > 0) {
@@ -872,6 +845,7 @@ bool clibpoll::handlesend(LPPOL_PS_CTX ctx)
 			memcpy(ctx->IOContext[1].pBuffer, &ctx->IOContext[1].pBuffer[POL_MAX_IO_BUFFER_SIZE], ctx->IOContext[1].nSecondOfs);
 		}
 		this->addlog(epollogtype::eDEBUG, "%s, event id %d copy %d bytes to buffer", __func__, (int)ctx->m_eventid, ctx->IOContext[1].nTotalBytes);
+		ctx->IOContext[1].nWaitIO = 1;
 		ctx->m_pendingsend = true;
 	}
 	return true;

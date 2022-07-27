@@ -1,31 +1,29 @@
 #include <iostream>
 #include <libpoll-wrapper.h>
-#include <conio.h>
-#include <signal.h>
+#include <csignal>
+#include <iostream>
 #include <stdlib.h>
 #include <stdio.h>
 
-static bool acceptcb(polbase* base, int eventid, LPVOID arg);
-static bool readcb(polbase* base, int eventid, LPVOID arg);
-static void eventcb(polbase* base, int eventid, epolstatus type, LPVOID arg);
+static bool acceptcb(polbase* base, int eventid, void* arg);
+static bool readcb(polbase* base, int eventid, void* arg);
 static void logger(epollogtype type, const char* msg);
-BOOL WINAPI signalhandler(DWORD signum);
+static void signal_handler(int signal);
 polbase* gbase = NULL;
 
 int main()
 {
     char sbuf[100] = { 0 };
 
-    SetConsoleCtrlHandler(signalhandler, TRUE);
+    std::signal(SIGINT, signal_handler);
 
     polbase* base = polnewbase(logger);
     gbase = base;
 
-
     for (int n = 0; n < 5; n++) {
 		sprintf_s(sbuf, 100, "Hello World!"); /**the initial data to send upon connection*/
 		int eventid = polconnect(base, "127.0.0.1", 3000, sbuf, strlen(sbuf)+1); /**set the initial buf size to 0 if there has no initial data to send*/
-        polsetcb(base, eventid, readcb, NULL, (LPVOID)n);
+        polsetcb(base, eventid, readcb, NULL, (void*)n);
     }
 
     std::cout << "press Ctrl-C to exit.\n";
@@ -33,15 +31,11 @@ int main()
 
     std::cout << "dispatchbreak called, cleaning the mess up...\n";
     polbasedelete(base);
-
-    std::cout << "cleanup done, press any key to exit.\n";
-    int ret = _getch();
-
-    return ret;
+    return 1;
 }
 
 /**read callback*/
-static bool readcb(polbase* base, int eventid, LPVOID arg)
+static bool readcb(polbase* base, int eventid, void* arg)
 {
     char buff[100] = { 0 };
     int index = (int)arg;
@@ -49,17 +43,6 @@ static bool readcb(polbase* base, int eventid, LPVOID arg)
     int readsize = polread(base, eventid, buff, sizeof(buff)); /**receive data, read it now...*/
     std::cout << "Server echo to index " << index << ": " << buff << "\n";
     return true;
-}
-
-static BOOL WINAPI signalhandler(DWORD signum)
-{
-    switch (signum)
-    {
-    case CTRL_C_EVENT:
-        poldispatchbreak(gbase); /**we will return dispatch upon Ctrl-C*/
-        break;
-    }
-    return TRUE;
 }
 
 /**assigned log callback*/
@@ -79,4 +62,9 @@ static void logger(epollogtype type, const char* msg)
         std::cout << "[WARNING] " << msg << "\n";
         break;
     }
+}
+
+static void signal_handler(int signal)
+{
+    poldispatchbreak(gbase); /**we will return dispatch upon Ctrl-C*/
 }

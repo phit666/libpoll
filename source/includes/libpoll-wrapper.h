@@ -25,15 +25,7 @@
 #include "libpoll.h"
 
 /**
-	@file pol.h
-
-	pol is a wrapper to mueiocp class in procedural style, designed to simplify
-	the implementation of AcceptEx, ConnectEx and GetQueuedCompletionStatusEx windows API.
-
-	Interface Callbacks:
-		polacceptcb - Accept/Listen callback to process new connection
-		polreadcb - Read callback to process received data
-		poleventcb - Event callback to process connection status
+	@file libpoll-wrapper.h
 */
 
 /**
@@ -54,9 +46,6 @@ typedef struct _stpolConnectInfo {
 /**
 		Create a new pol base.
 
-		@param cpucorenum		Number of CPU, it's multiplied by 2 so 2 will spawn
-								4 thread workers, set it to 0 to automatically get
-								the machine's CPU count.
 		@param loghandler		The log callback function, it will default to
 								OutputDebugString when set to NULL.
 		@param logverboseflags	Bit flags of enum class emuelogtype for filtering
