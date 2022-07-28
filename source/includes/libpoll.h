@@ -71,6 +71,7 @@ typedef WSAPOLLFD _pollfd;
 #define SOCKET_ERROR -1
 typedef int sock_t;
 typedef pollfd _pollfd;
+uint32_t GetTickCount();
 #endif
 
 #include <stdio.h>
@@ -204,6 +205,10 @@ typedef struct _POL_PS_CTX
 		arg = NULL;
 		arg2 = NULL;
 		_this = NULL;
+		m_remove = false;
+		m_shutdown = false;
+		m_removedtick = 0;
+		m_tid = -1;
 	}
 
 	void clear2()
@@ -225,6 +230,10 @@ typedef struct _POL_PS_CTX
 		arg = NULL;
 		arg2 = NULL;
 		_this = NULL;
+		m_remove = false;
+		m_shutdown = false;
+		m_removedtick = 0;
+		m_tid = -1;
 	}
 
 
@@ -232,7 +241,9 @@ typedef struct _POL_PS_CTX
 	sock_t m_socket;
 	int m_eventid;
 	_POL_PIO_CTX IOContext[2];
+	std::recursive_mutex m;
 	unsigned char m_type;
+	char m_tid;
 	char m_ipaddr[16];
 	bool m_connected;
 	bool m_pendingsend;
@@ -244,9 +255,16 @@ typedef struct _POL_PS_CTX
 	void* arg;
 	void* arg2;
 	void* _this;
+	bool m_remove;
+	uint32_t m_removedtick;
+	bool m_shutdown;
 } POL_PS_CTX, *LPPOL_PS_CTX;
 
-
+typedef struct _stpollfds
+{
+	_pollfd* pollfdarr;
+	int counts;
+} stpollfds, * lpstpollfds;
 
 class clibpoll
 {
@@ -283,6 +301,11 @@ public:
 
 private:
 
+	void loop(int tid = -1);
+	std::vector<std::thread*> m_vtloop;
+	std::map<int, lpstpollfds> m_mappollfdarr;
+	lpstpollfds getlpstpollfds(int tid);
+
 	_pollfd* m_pollfdarr;
 	int m_pollfdcounts;
 	intptr_t m_tindex;
@@ -297,9 +320,9 @@ private:
 	bool handlesend(LPPOL_PS_CTX ctx);
 	void closeeventid(int event_id, epolstatus flag = epolstatus::eCLOSED);
 	void clear();
-	void remove(int event_id);
+	int isremove(LPPOL_PS_CTX ctx);
 
-	void makepollfdarr();
+	void makepollfdarr(int tid);
 	bool m_rebuildpollfdarr;
 
 	polacceptcb m_acceptcb;
