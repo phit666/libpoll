@@ -3,7 +3,7 @@
 	@version libpoll 1.x.x
 */
 #define _LIBPOLL_MAJOR_VER_ 0x01
-#define _LIBPOLL_MINOR_VER_ 0x00
+#define _LIBPOLL_MINOR_VER_ 0x01
 #define _LIBPOLL_PATCH_VER_ 0x02
 
 /*
@@ -301,13 +301,12 @@ public:
 
 private:
 
-	void loop(int tid = -1);
+	void loop(LPVOID p);
+
 	std::vector<std::thread*> m_vtloop;
 	std::map<int, lpstpollfds> m_mappollfdarr;
 	lpstpollfds getlpstpollfds(int tid);
 
-	_pollfd* m_pollfdarr;
-	int m_pollfdcounts;
 	intptr_t m_tindex;
 	polloghandler fnc_loghandler;
 
@@ -321,6 +320,7 @@ private:
 	void closeeventid(int event_id, epolstatus flag = epolstatus::eCLOSED);
 	void clear();
 	int isremove(LPPOL_PS_CTX ctx);
+	int gettid(int flag=0);
 
 	void makepollfdarr(int tid);
 	bool m_rebuildpollfdarr;

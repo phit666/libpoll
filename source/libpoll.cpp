@@ -25,18 +25,39 @@ clibpoll::clibpoll()
 	this->m_initsvrextbuffsize = POL_MAX_IO_BUFFER_SIZE;
 	this->m_logverboseflags = (unsigned int)epollogtype::eINFO | (unsigned int)epollogtype::eERROR;
 	this->fnc_loghandler = NULL;
-
-	this->m_pollfdarr = NULL;
-	this->m_pollfdcounts = 0;
 }
 
 clibpoll::~clibpoll()
 {
 	this->addlog(epollogtype::eDEBUG, "%s(), deallocator called.", __func__);
+
+	std::vector <std::thread*>::iterator iterq;
+	std::map <int, lpstpollfds>::iterator mapiterq;
+
 	std::lock_guard<std::recursive_mutex> lk(m);
+
+	this->addlog(epollogtype::eDEBUG, "%s(), deleting worker threads.", __func__);
+	for (iterq = this->m_vtloop.begin(); iterq != this->m_vtloop.end(); iterq++) {
+		std::thread* t = *iterq;
+		t->join();
+		delete t;
+	}
+
+	this->addlog(epollogtype::eDEBUG, "%s(), deleting poll fd arrays.", __func__);
+	for (mapiterq = this->m_mappollfdarr.begin(); mapiterq != this->m_mappollfdarr.end(); mapiterq++) {
+		lpstpollfds pollfdarr = mapiterq->second;
+		free(pollfdarr->pollfdarr);
+		delete pollfdarr;
+	}
+
+	this->m_vtloop.clear();
+	this->addlog(epollogtype::eDEBUG, "%s(), worker threads vector cleared.", __func__);
+
+	this->m_mappollfdarr.clear();
+	this->addlog(epollogtype::eDEBUG, "%s(), fd arrays map cleared.", __func__);
+
 	this->clear();
-	if (this->m_pollfdarr != NULL)
-		free(this->m_pollfdarr);
+
 #ifdef _WIN32
 	WSACleanup();
 #endif
@@ -74,6 +95,14 @@ int clibpoll::isremove(LPPOL_PS_CTX ctx)
 	return 0;
 }
 
+int clibpoll::gettid(int flag)
+{
+	std::lock_guard<std::recursive_mutex> lk(m);
+	if (this->m_activeworkers >= this->m_workers)
+		this->m_activeworkers = (flag) ? 0 : 1;
+	return this->m_activeworkers++;
+}
+
 void clibpoll::makepollfdarr(int tid)
 {
 	_pollfd pollfd;
@@ -83,8 +112,6 @@ void clibpoll::makepollfdarr(int tid)
 	int ctxstatus = -1;
 	int activectxcounts = 0;
 	std::map <int, LPPOL_PS_CTX>::iterator iterq;
-
-	assert(this->m_pollfdarr != NULL);
 
 	std::lock_guard<std::recursive_mutex> lk(m);
 
@@ -217,25 +244,34 @@ void clibpoll::init(polloghandler loghandler, unsigned int logverboseflags, size
 	}
 #endif
 	this->m_listensocket = createsocket(true);
-	unsigned char* tmpbuffer = (unsigned char*)calloc(sizeof(_pollfd), sizeof(unsigned char));
-	if (tmpbuffer == NULL) {
-		this->addlog(epollogtype::eERROR, "%s(), m_pollfdarr is NULL.", __func__);
-		return;
-	}
-	this->m_pollfdarr = (_pollfd*)tmpbuffer;
 }
 
-void clibpoll::loop(int tid)
+void clibpoll::loop(LPVOID p)
 {
+	int tid = -1;
+	if (p == NULL) {
+		tid = this->gettid();
+	}
+	else {
+		intptr_t _tid = (intptr_t)p;
+		tid = static_cast<int>(_tid);
+	}
+
 	lpstpollfds _stpollfd = this->getlpstpollfds(tid);
 
 	while (true) {
+
+		this->m.lock();
 		if (this->m_loopbreak) {
 			this->addlog(epollogtype::eDEBUG, "%s, m_loopbreak called, exiting.", __func__, SOCKERR);
+			this->m.unlock();
 			break;
 		}
+		this->m.unlock();
+
 		this->makepollfdarr(tid);
-		if (this->m_pollfdcounts == 0) {
+
+		if (_stpollfd->counts == 0) {
 #ifdef _WIN32
 			Sleep(1000);
 #else
@@ -243,70 +279,72 @@ void clibpoll::loop(int tid)
 #endif
 			continue;
 		}
+
 		int err = _poll(_stpollfd->pollfdarr, _stpollfd->counts, 1000);
+
 		if (err == SOCKET_ERROR) {
 			this->addlog(epollogtype::eDEBUG, "%s, Error : %d", __func__, SOCKERR);
 			continue;
 		}
 		if (err > 0) {
-			for (int n = 0; n < this->m_pollfdcounts; n++) {
+			for (int n = 0; n < _stpollfd->counts; n++) {
 
-				if (this->m_pollfdarr[n].fd == INVALID_SOCKET || this->m_pollfdarr[n].revents == 0)
+				if (_stpollfd->pollfdarr[n].fd == INVALID_SOCKET || _stpollfd->pollfdarr[n].revents == 0)
 					continue;
 
-				LPPOL_PS_CTX ctx = this->getctx(this->m_pollfdarr[n].fd);
+				LPPOL_PS_CTX ctx = this->getctx(_stpollfd->pollfdarr[n].fd);
 
 				if (ctx == NULL) {
-					this->addlog(epollogtype::eDEBUG, "%s, event id %d ctx is NULL.", __func__, this->m_pollfdarr[n].fd);
+					this->addlog(epollogtype::eDEBUG, "%s, event id %d ctx is NULL.", __func__, _stpollfd->pollfdarr[n].fd);
 					continue;
 				}
 
-				if (this->m_pollfdarr[n].revents & POLLHUP) {
-					this->closeeventid((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
-					this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLHUP.", __func__, this->m_pollfdarr[n].fd);
+				if (_stpollfd->pollfdarr[n].revents & POLLHUP) {
+					this->closeeventid((int)_stpollfd->pollfdarr[n].fd, epolstatus::eSOCKERROR);
+					this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLHUP.", __func__, _stpollfd->pollfdarr[n].fd);
 					continue;
 				}
 
-				if (this->m_pollfdarr[n].revents & POLLERR) {
-					this->closeeventid((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
-					this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLERR.", __func__, this->m_pollfdarr[n].fd);
+				if (_stpollfd->pollfdarr[n].revents & POLLERR) {
+					this->closeeventid((int)_stpollfd->pollfdarr[n].fd, epolstatus::eSOCKERROR);
+					this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLERR.", __func__, _stpollfd->pollfdarr[n].fd);
 					continue;
 				}
 
-				if (this->m_pollfdarr[n].revents & POLLNVAL) {
-					this->closeeventid((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
-					this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLNVAL.", __func__, this->m_pollfdarr[n].fd);
+				if (_stpollfd->pollfdarr[n].revents & POLLNVAL) {
+					this->closeeventid((int)_stpollfd->pollfdarr[n].fd, epolstatus::eSOCKERROR);
+					this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLNVAL.", __func__, _stpollfd->pollfdarr[n].fd);
 					continue;
 				}
 
-				if (this->m_pollfdarr[n].revents & POLLRDNORM) {
+				if (_stpollfd->pollfdarr[n].revents & POLLRDNORM) {
 					if ((ctx->m_type & (unsigned char)epoliotype::eACCEPT_IO) == (unsigned char)epoliotype::eACCEPT_IO) {
-						this->addlog(epollogtype::eDEBUG, "%s, event id %d eACCEPT_IO", __func__, this->m_pollfdarr[n].fd);
+						this->addlog(epollogtype::eDEBUG, "%s, event id %d eACCEPT_IO", __func__, _stpollfd->pollfdarr[n].fd);
 						this->handleaccept();
 						continue;
 					}
 				}
 
-				if (this->m_pollfdarr[n].revents & POLLWRNORM) {
+				if (_stpollfd->pollfdarr[n].revents & POLLWRNORM) {
 					if ((ctx->m_type & (unsigned char)epoliotype::eCONNECT_IO) == (unsigned char)epoliotype::eCONNECT_IO) {
-						this->addlog(epollogtype::eDEBUG, "%s, event id %d eCONNECT_IO", __func__, this->m_pollfdarr[n].fd);
+						this->addlog(epollogtype::eDEBUG, "%s, event id %d eCONNECT_IO", __func__, _stpollfd->pollfdarr[n].fd);
 						this->handleconnect(ctx);
 						continue;
 					}
 				}
 
-				if ((this->m_pollfdarr[n].revents & POLLIN) && ((ctx->m_type & (unsigned char)epoliotype::eRECV_IO) == (unsigned char)epoliotype::eRECV_IO)) {
+				if ((_stpollfd->pollfdarr[n].revents & POLLIN) && ((ctx->m_type & (unsigned char)epoliotype::eRECV_IO) == (unsigned char)epoliotype::eRECV_IO)) {
 					if (!this->handlereceive(ctx)) {
-						this->closeeventid((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
-						this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLIN.", __func__, this->m_pollfdarr[n].fd);
+						this->closeeventid((int)_stpollfd->pollfdarr[n].fd, epolstatus::eSOCKERROR);
+						this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLIN.", __func__, _stpollfd->pollfdarr[n].fd);
 						continue;
 					}
 				}
 
-				if (this->m_pollfdarr[n].revents & POLLOUT && ((ctx->m_type & (unsigned char)epoliotype::eSEND_IO) == (unsigned char)epoliotype::eSEND_IO)) {
+				if (_stpollfd->pollfdarr[n].revents & POLLOUT && ((ctx->m_type & (unsigned char)epoliotype::eSEND_IO) == (unsigned char)epoliotype::eSEND_IO)) {
 					if (!this->handlesend(ctx)) {
-						this->closeeventid((int)this->m_pollfdarr[n].fd, epolstatus::eSOCKERROR);
-						this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLOUT.", __func__, this->m_pollfdarr[n].fd);
+						this->closeeventid((int)_stpollfd->pollfdarr[n].fd, epolstatus::eSOCKERROR);
+						this->addlog(epollogtype::eDEBUG, "%s, event id %d POLLOUT.", __func__, _stpollfd->pollfdarr[n].fd);
 					}
 				}
 			}
@@ -329,24 +367,30 @@ void clibpoll::dispatch()
 	lpstpollfds pollfds;
 	for (int n = 1; n < this->m_workers; n++) {
 
-		pollfds = (lpstpollfds)calloc(1, sizeof(lpstpollfds));
+		pollfds = new stpollfds;
+		if (pollfds == NULL)
+			return;
 		pollfds->pollfdarr = (_pollfd*)calloc(1, sizeof(_pollfd));
 		pollfds->counts = 1;
 		this->m_mappollfdarr.insert(std::pair<int, lpstpollfds>(n, pollfds));
 
-		this->m_activeworkers = n;
-		std::thread* t = new std::thread([this]() { this->loop(this->m_activeworkers); });
+		intptr_t tid = n;
+		std::thread* t = new std::thread([this]() { this->loop(NULL); });
 		this->m_vtloop.push_back(t);
 	}
-	pollfds = (lpstpollfds)calloc(1, sizeof(lpstpollfds));
+	pollfds = new stpollfds; 
+	if (pollfds == NULL)
+		return;
 	pollfds->pollfdarr = (_pollfd*)calloc(1, sizeof(_pollfd));
 	pollfds->counts = 1;
 	this->m_mappollfdarr.insert(std::pair<int, lpstpollfds>(0, pollfds));
-	this->loop(0);
+	intptr_t tid = 0;
+	this->loop((LPVOID)tid);
 }
 
 void clibpoll::dispatchbreak()
 {
+	std::lock_guard<std::recursive_mutex> lk(m);
 	this->m_loopbreak = true;
 }
 
@@ -666,7 +710,7 @@ int clibpoll::makeconnect(const char* ipaddr, unsigned short int port, intptr_t 
 	pSocketContext->m_conport = port;
 	pSocketContext->m_eventid = event_id;
 	pSocketContext->m_type = (unsigned char)epoliotype::eCONNECT_IO;
-	pSocketContext->m_tid = 0;
+	pSocketContext->m_tid = this->gettid(1);
 
 	struct hostent* h = gethostbyname(ipaddr);
 	pSocketContext->m_conipaddr = (h != NULL) ? ntohl(*(unsigned int*)h->h_addr) : 0;
@@ -705,10 +749,7 @@ bool clibpoll::setctx(int event_id, LPPOL_PS_CTX ctx)
 	if (ctx == NULL)
 		return false;
 	std::lock_guard<std::recursive_mutex> lk(m);
-	if (this->m_activeworkers >= this->m_workers) {
-		this->m_activeworkers = 1;
-	}
-	ctx->m_tid = this->m_activeworkers++;
+	ctx->m_tid = this->gettid();
 	this->m_polmaps.insert(std::pair<int, LPPOL_PS_CTX>(event_id, ctx));
 	this->m_rebuildpollfdarr = true;
 	return true;
@@ -765,10 +806,7 @@ bool clibpoll::handleaccept()
 		lpAcceptSocketContext->_this = this;
 		lpAcceptSocketContext->m_connected = true;
 		lpAcceptSocketContext->m_eventid = event_id;
-		if (this->m_activeworkers >= this->m_workers) {
-			this->m_activeworkers = 1;
-		}
-		lpAcceptSocketContext->m_tid = this->m_activeworkers++;
+		lpAcceptSocketContext->m_tid = this->gettid();
 		this->m_polmaps.insert(std::pair<int, LPPOL_PS_CTX>(event_id, lpAcceptSocketContext));
 		this->m_rebuildpollfdarr = true;
 	}
