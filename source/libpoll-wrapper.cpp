@@ -1,7 +1,5 @@
 #include "includes/libpoll-wrapper.h"
 
-char g_dummybuf[16] = { 0 };
-
 polbase* polnewbase(polloghandler loghandler, unsigned int logverboseflags, int connect2ndbuffer) {
 	clibpoll* muebase = new clibpoll;
 	muebase->init(loghandler, logverboseflags, 0, connect2ndbuffer);
@@ -20,6 +18,7 @@ bool polsetcustomcontext(polbase* base, int event_id, LPPOL_PS_CTX ctx) {
 
 void poldelcustomcontext(polbase* base, LPPOL_PS_CTX ctx) {
 	clibpoll* poll = (clibpoll*)base;
+	std::lock_guard<std::recursive_mutex> _lk(ctx->m);
 	poll->deletectx(ctx);
 }
 
@@ -43,9 +42,9 @@ void poldispatch(polbase* base) {
 	poll->dispatch();
 }
 
-int polconnect(polbase* base, const char* ipaddr, unsigned short int port, char* initbuf, int initlen, LPPOL_PS_CTX ctx) {
+int polconnect(polbase* base, const char* ipaddr, unsigned short int port, char* initbuf, int initlen, int flag, LPPOL_PS_CTX ctx) {
 	clibpoll* poll = (clibpoll*)base;
-	int eventid = poll->makeconnect(ipaddr, port, 0, ctx);
+	int eventid = poll->makeconnect(ipaddr, port, flag, ctx);
 	LPPOL_PS_CTX _ctx = poll->getctx(eventid);
 	if (_ctx == NULL) {
 		poll->addlog(epollogtype::eWARNING, "%s(), makeconnect failed.", __func__);
@@ -60,9 +59,9 @@ int polconnect(polbase* base, const char* ipaddr, unsigned short int port, char*
 	return eventid;
 }
 
-int polmakeconnect(polbase* base, const char* ipaddr, unsigned short int port, LPPOL_PS_CTX ctx) {
+int polmakeconnect(polbase* base, const char* ipaddr, unsigned short int port, int flag, LPPOL_PS_CTX ctx) {
 	clibpoll* poll = (clibpoll*)base;
-	int eventid = poll->makeconnect(ipaddr, port, 0, ctx);
+	int eventid = poll->makeconnect(ipaddr, port, flag, ctx);
 	LPPOL_PS_CTX _ctx = poll->getctx(eventid);
 	if (_ctx == NULL) {
 		poll->addlog(epollogtype::eWARNING, "%s(), polmakeconnect failed.", __func__);
