@@ -42,9 +42,9 @@ void poldispatch(polbase* base) {
 	poll->dispatch();
 }
 
-int polconnect(polbase* base, const char* ipaddr, unsigned short int port, char* initbuf, int initlen, LPPOL_PS_CTX ctx) {
+int polconnect(polbase* base, const char* ipaddr, unsigned short int port, char* initbuf, int initlen, int flag, LPPOL_PS_CTX ctx) {
 	clibpoll* poll = (clibpoll*)base;
-	int eventid = poll->makeconnect(ipaddr, port, 0, ctx);
+	int eventid = poll->makeconnect(ipaddr, port, flag, ctx);
 	LPPOL_PS_CTX _ctx = poll->getctx(eventid);
 	if (_ctx == NULL) {
 		poll->addlog(epollogtype::eWARNING, "%s(), makeconnect failed.", __func__);
@@ -59,9 +59,9 @@ int polconnect(polbase* base, const char* ipaddr, unsigned short int port, char*
 	return eventid;
 }
 
-int polmakeconnect(polbase* base, const char* ipaddr, unsigned short int port, LPPOL_PS_CTX ctx) {
+int polmakeconnect(polbase* base, const char* ipaddr, unsigned short int port, int flag, LPPOL_PS_CTX ctx) {
 	clibpoll* poll = (clibpoll*)base;
-	int eventid = poll->makeconnect(ipaddr, port, 0, ctx);
+	int eventid = poll->makeconnect(ipaddr, port, flag, ctx);
 	LPPOL_PS_CTX _ctx = poll->getctx(eventid);
 	if (_ctx == NULL) {
 		poll->addlog(epollogtype::eWARNING, "%s(), polmakeconnect failed.", __func__);

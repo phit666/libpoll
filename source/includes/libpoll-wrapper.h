@@ -73,20 +73,28 @@ void pollisten(polbase* base, unsigned short int port, polacceptcb acceptcb, voi
 	@param port					Server port to connect to.
 	@param initbuf				Optional initial data to send to server, this can't be NULL and user is responsible in allocating memory for this variable.
 	@param initlen				Size of optional data to send to server, set to 0 if initbuf has no data.
+	@param flag					Currently CONNECT_FLAG_MAIN_THREAD is the only available flag, this flag will instruct connect to
+								to be processed in the main thread, this option is recommended if the application will accept client connections
+								and also connect to other host, doing so will let the rest of the threads to process client connections and 
+								focus the main thread to accept and connect.
 	@param ctx					User provided pointer to POL_PS_CTX struct, this is required if polenablecustomcontext has been called.
 	@return						-1 on failure and pol event id on success.
 */
-int polconnect(polbase* base, const char* ipaddr, unsigned short int port, char *initbuf, int initlen, LPPOL_PS_CTX ctx=NULL);
+int polconnect(polbase* base, const char* ipaddr, unsigned short int port, char *initbuf, int initlen, int flag=0, LPPOL_PS_CTX ctx=NULL);
 
 /**
 	Make the connection setup only but don't connect.
 	@param base					pol base from polnewbase call.
 	@param ipaddr				Server IP address to connect to.
 	@param port					Server port to connect to.
+	@param flag					Currently CONNECT_FLAG_MAIN_THREAD is the only available flag, this flag will instruct connect to
+								to be processed in the main thread, this option is recommended if the application will accept client connections
+								and also connect to other host, doing so will let the rest of the threads to process client connections and
+								focus the main thread to accept and connect.
 	@param ctx					User provided pointer to POL_PS_CTX struct, this is required if polenablecustomcontext has been called.
 	@return						-1 on failure and pol event id on success.
 */
-int polmakeconnect(polbase* base, const char* ipaddr, unsigned short int port, LPPOL_PS_CTX ctx=NULL);
+int polmakeconnect(polbase* base, const char* ipaddr, unsigned short int port, int flag = 0, LPPOL_PS_CTX ctx=NULL);
 
 /**
 	Connect to another server based on the parameters of polmakeconnect call.

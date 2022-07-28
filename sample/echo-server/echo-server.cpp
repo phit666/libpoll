@@ -49,7 +49,7 @@ static bool readcb(polbase* base, int eventid, void* arg)
 
     int readsize = polread(base, eventid, buff, sizeof(buff));
     
-    std::cout << "Client message : " << buff << "\n";
+    printf("Client message : %s\n", buff);
 
     polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
 
@@ -78,16 +78,19 @@ static void logger(epollogtype type, const char* msg)
 {
     switch (type) {
     case epollogtype::eINFO:
-        std::cout << "[INFO] " << msg << "\n";
+        printf("[INFO] %s\n", msg);
+        break;
+    case epollogtype::eTEST:
+        printf("[TEST] %s\n", msg);
         break;
     case epollogtype::eDEBUG:
-        std::cout << "[DEBUG] " << msg << "\n";
+        printf("[DEBUG] %s\n", msg);
         break;
     case epollogtype::eERROR:
-        std::cout << "[ERROR] " << msg << "\n";
+        printf("[ERROR] %s\n", msg);
         break;
     case epollogtype::eWARNING:
-        std::cout << "[WARNING] " << msg << "\n";
+        printf("[WARNING] %s\n", msg);
         break;
     }
 }

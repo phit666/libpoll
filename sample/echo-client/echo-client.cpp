@@ -17,7 +17,7 @@ int main()
 
     std::signal(SIGINT, signal_handler);
 
-    polbase* base = polnewbase(logger, (uint32_t)epollogtype::eALL);
+    polbase* base = polnewbase(logger, (uint32_t)epollogtype::eTEST);
     gbase = base;
 
     for (int n = 0; n < 100; n++) {
@@ -41,7 +41,7 @@ static bool readcb(polbase* base, int eventid, void* arg)
     int index = (int)arg;
 
     int readsize = polread(base, eventid, buff, sizeof(buff)); /**receive data, read it now...*/
-    std::cout << "Server echo to index " << index << ": " << buff << "\n";
+    printf("Server echo to index %d : %s\n", index, buff);
     return true;
 }
 
@@ -50,16 +50,19 @@ static void logger(epollogtype type, const char* msg)
 {
     switch (type) {
     case epollogtype::eINFO:
-        std::cout << "[INFO] " << msg << "\n";
+        printf("[INFO] %s\n", msg);
+        break;
+    case epollogtype::eTEST:
+        printf("[TEST] %s\n", msg);
         break;
     case epollogtype::eDEBUG:
-        std::cout << "[DEBUG] " << msg << "\n";
+        printf("[DEBUG] %s\n", msg);
         break;
     case epollogtype::eERROR:
-        std::cout << "[ERROR] " << msg << "\n";
+        printf("[ERROR] %s\n", msg);
         break;
     case epollogtype::eWARNING:
-        std::cout << "[WARNING] " << msg << "\n";
+        printf("[WARNING] %s\n", msg);
         break;
     }
 }

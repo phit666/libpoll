@@ -4,7 +4,7 @@
 */
 #define _LIBPOLL_MAJOR_VER_ 0x01
 #define _LIBPOLL_MINOR_VER_ 0x01
-#define _LIBPOLL_PATCH_VER_ 0x02
+#define _LIBPOLL_PATCH_VER_ 0x03
 
 /*
  * MIT License
@@ -91,6 +91,8 @@ uint32_t GetTickCount();
 #endif
 
 #define POL_MAX_CONT_REALLOC_REQ		100			
+
+#define CONNECT_FLAG_MAIN_THREAD 1
 
 enum class epoliotype
 {
@@ -279,7 +281,7 @@ public:
 	void setacceptcbargument(void* arg);
 	void setreadeventcbargument(int event_id, void* arg);
 	void setconnectcb(int event_id, polreadcb readcb, poleventcb eventcb, void* arg = NULL);
-	int makeconnect(const char* ipaddr, unsigned short int port, intptr_t index, LPPOL_PS_CTX ctx=NULL);
+	int makeconnect(const char* ipaddr, unsigned short int port, int flag=0, LPPOL_PS_CTX ctx=NULL);
 	bool connect(int event_id, char* initData, int initLen);
 	bool sendbuffer(int event_id, unsigned char* lpMsg, unsigned int dwSize);
 	size_t readbuffer(int event_id, char* buffer, size_t buffersize);
@@ -302,6 +304,7 @@ public:
 private:
 
 	void loop(LPVOID p);
+	void _loop(int tid, lpstpollfds _stpollfd);
 
 	std::vector<std::thread*> m_vtloop;
 	std::map<int, lpstpollfds> m_mappollfdarr;
