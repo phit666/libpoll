@@ -1,2 +1,2 @@
 # libpoll
- Fast and scalable c++ multi-threaded network library for windows and linux.
+ Fast and scalable c++ network library for windows and linux.
