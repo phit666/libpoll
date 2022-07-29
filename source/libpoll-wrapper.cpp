@@ -18,7 +18,6 @@ bool polsetcustomcontext(polbase* base, int event_id, LPPOL_PS_CTX ctx) {
 
 void poldelcustomcontext(polbase* base, LPPOL_PS_CTX ctx) {
 	clibpoll* poll = (clibpoll*)base;
-	std::lock_guard<std::recursive_mutex> _lk(ctx->m);
 	poll->deletectx(ctx);
 }
 

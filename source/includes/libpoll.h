@@ -3,8 +3,8 @@
 	@version libpoll 1.x.x
 */
 #define _LIBPOLL_MAJOR_VER_ 0x01
-#define _LIBPOLL_MINOR_VER_ 0x01
-#define _LIBPOLL_PATCH_VER_ 0x03
+#define _LIBPOLL_MINOR_VER_ 0x02
+#define _LIBPOLL_PATCH_VER_ 0x04
 
 /*
  * MIT License
@@ -210,7 +210,6 @@ typedef struct _POL_PS_CTX
 		m_remove = false;
 		m_shutdown = false;
 		m_removedtick = 0;
-		m_tid = -1;
 	}
 
 	void clear2()
@@ -235,7 +234,6 @@ typedef struct _POL_PS_CTX
 		m_remove = false;
 		m_shutdown = false;
 		m_removedtick = 0;
-		m_tid = -1;
 	}
 
 
@@ -243,9 +241,7 @@ typedef struct _POL_PS_CTX
 	sock_t m_socket;
 	int m_eventid;
 	_POL_PIO_CTX IOContext[2];
-	std::recursive_mutex m;
 	unsigned char m_type;
-	char m_tid;
 	char m_ipaddr[16];
 	bool m_connected;
 	bool m_pendingsend;
@@ -303,12 +299,10 @@ public:
 
 private:
 
-	void loop(LPVOID p);
-	void _loop(int tid, lpstpollfds _stpollfd);
-
-	std::vector<std::thread*> m_vtloop;
-	std::map<int, lpstpollfds> m_mappollfdarr;
-	lpstpollfds getlpstpollfds(int tid);
+	void loop();
+	void _loop(lpstpollfds _stpollfd, uint32_t timeout);
+	lpstpollfds m_pollfdarr;
+	void makepollfdarr(lpstpollfds _stpollfd);
 
 	intptr_t m_tindex;
 	polloghandler fnc_loghandler;
@@ -322,11 +316,8 @@ private:
 	bool handlesend(LPPOL_PS_CTX ctx);
 	void closeeventid(int event_id, epolstatus flag = epolstatus::eCLOSED);
 	void clear();
+	void deleventid(int eventid);
 	int isremove(LPPOL_PS_CTX ctx);
-	int gettid(int flag=0);
-
-	void makepollfdarr(int tid);
-	bool m_rebuildpollfdarr;
 
 	polacceptcb m_acceptcb;
 	void* m_acceptarg;
@@ -342,7 +333,6 @@ private:
 	std::map<int, LPPOL_PS_CTX>m_polmaps;
 
 	unsigned int m_logverboseflags;
-	int m_workers;
 	
 	unsigned int m_listenip;
 	unsigned short int m_listenport;
@@ -352,6 +342,8 @@ private:
 
 	bool m_customctx;
 	bool m_loopbreak;
+
+	int m_ftid;
 };
 
 

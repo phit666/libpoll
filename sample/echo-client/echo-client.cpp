@@ -17,7 +17,7 @@ int main()
 
     std::signal(SIGINT, signal_handler);
 
-    polbase* base = polnewbase(logger, (uint32_t)epollogtype::eTEST);
+    polbase* base = polnewbase(logger);
     gbase = base;
 
     for (int n = 0; n < 100; n++) {
