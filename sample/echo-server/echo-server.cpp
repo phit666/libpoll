@@ -49,7 +49,7 @@ static bool readcb(polbase* base, int eventid, void* arg)
 
     int readsize = polread(base, eventid, buff, sizeof(buff));
     
-    printf("Client message : %s\n", buff);
+    printf(">>> Client message : %s\n", buff);
 
     polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
 
@@ -67,8 +67,9 @@ static void eventcb(polbase* base, int eventid, epolstatus type, void* arg)
             ipaddr, polgetsocket(base, eventid));
         break;
     case epolstatus::eCLOSED:
-        break;
-    case epolstatus::eSOCKERROR:
+        polgetipaddr(base, eventid, ipaddr);
+        poladdlog(base, epollogtype::eINFO, "client disconnected, ip:%s socket:%d",
+            ipaddr, polgetsocket(base, eventid));
         break;
     }
 }
