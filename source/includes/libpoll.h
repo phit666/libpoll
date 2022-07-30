@@ -107,13 +107,20 @@ enum class epoliotype
 */
 enum class epollogtype
 {
+	/*equal to NULL, no message will be shown*/
+	eSILENT = 0,
+	/*it will show informational messages*/
 	eINFO = 1,
+	/*it will show non-fatal or recoverable errors messages*/
 	eWARNING = 2,
+	/*it will show fatal error messages*/
 	eERROR = 4,
+	/*it will show messages useable for debugging*/
 	eDEBUG = 8,
+	/*it will show some more info not included in eALL*/
 	eTEST = 16,
-	eALL = eINFO | eWARNING | eERROR | eDEBUG,
-	eSILENT = 32
+	/*equal to eINFO | eWARNING | eERROR | eDEBUG*/
+	eALL = eINFO | eWARNING | eERROR | eDEBUG
 };
 
 /**
@@ -122,8 +129,9 @@ enum class epollogtype
 enum class epolstatus
 {
 	eCONNECTED,
-	eCLOSED,
+	eSHUTDOWN,
 	eSOCKERROR,
+	eCLOSED,
 	eNOEVENCB
 };
 
@@ -207,9 +215,7 @@ typedef struct _POL_PS_CTX
 		arg = NULL;
 		arg2 = NULL;
 		_this = NULL;
-		m_remove = false;
 		m_shutdown = false;
-		m_removedtick = 0;
 	}
 
 	void clear2()
@@ -231,9 +237,7 @@ typedef struct _POL_PS_CTX
 		arg = NULL;
 		arg2 = NULL;
 		_this = NULL;
-		m_remove = false;
 		m_shutdown = false;
-		m_removedtick = 0;
 	}
 
 
@@ -253,16 +257,8 @@ typedef struct _POL_PS_CTX
 	void* arg;
 	void* arg2;
 	void* _this;
-	bool m_remove;
-	uint32_t m_removedtick;
 	bool m_shutdown;
 } POL_PS_CTX, *LPPOL_PS_CTX;
-
-typedef struct _stpollfds
-{
-	_pollfd* pollfdarr;
-	int counts;
-} stpollfds, * lpstpollfds;
 
 class clibpoll
 {
@@ -292,7 +288,7 @@ public:
 	bool setctx(int event_id, LPPOL_PS_CTX ctx);
 	void enablecustomctx() { this->m_customctx = true; }
 
-	LPPOL_PS_CTX getctx(int event_id);
+	LPPOL_PS_CTX getctx(int event_id, bool ignoreremoved=false);
 	void deletectx(LPPOL_PS_CTX ctx);
 
 	std::recursive_mutex m;
@@ -300,9 +296,9 @@ public:
 private:
 
 	void loop();
-	void _loop(lpstpollfds _stpollfd, uint32_t timeout);
-	lpstpollfds m_pollfdarr;
-	void makepollfdarr(lpstpollfds _stpollfd);
+	void _loop(uint32_t timeout);
+	void makepollfdarr();
+	std::vector<_pollfd> m_vpollarr;
 
 	intptr_t m_tindex;
 	polloghandler fnc_loghandler;
@@ -314,10 +310,9 @@ private:
 	bool handleconnect(LPPOL_PS_CTX ctx);
 	int handlereceive(LPPOL_PS_CTX ctx);
 	bool handlesend(LPPOL_PS_CTX ctx);
-	void closeeventid(int event_id, epolstatus flag = epolstatus::eCLOSED);
+	void closeeventid(int event_id, epolstatus flag = epolstatus::eSHUTDOWN);
 	void clear();
 	void deleventid(int eventid);
-	int isremove(LPPOL_PS_CTX ctx);
 
 	polacceptcb m_acceptcb;
 	void* m_acceptarg;
