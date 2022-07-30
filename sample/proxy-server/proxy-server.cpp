@@ -1,4 +1,3 @@
-#include <iostream>
 #include <libpoll-wrapper.h>
 #include <csignal>
 #include <iostream>
