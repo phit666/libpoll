@@ -122,7 +122,7 @@ bool clibpoll::iseventidvalid(int event_id)
 	return bret;
 }
 
-LPPOL_PS_CTX clibpoll::getctx(int event_id, bool ignoreremoved)
+LPPOL_PS_CTX clibpoll::getctx(int event_id)
 {
 	std::map<int, LPPOL_PS_CTX>::iterator Iter;
 	if ((sock_t)event_id == INVALID_SOCKET)
@@ -133,8 +133,6 @@ LPPOL_PS_CTX clibpoll::getctx(int event_id, bool ignoreremoved)
 		return NULL;
 	}
 	LPPOL_PS_CTX ctx = Iter->second;
-	if (ctx->m_remove == true && ignoreremoved == false)
-		return NULL;
 	return ctx;
 }
 
@@ -210,20 +208,20 @@ void clibpoll::_loop(uint32_t timeout)
 			}
 
 			if (this->m_vpollarr[n].revents & POLLHUP) {
-				this->closeeventid((int)this->m_vpollarr[n].fd, epolstatus::eCLOSED);
 				this->addlog(epollogtype::eTEST, "%s, event id %d POLLHUP.", __func__, this->m_vpollarr[n].fd);
+				this->closeeventid((int)this->m_vpollarr[n].fd, epolstatus::eCLOSED);
 				continue;
 			}
 
 			if (this->m_vpollarr[n].revents & POLLERR) {
-				this->closeeventid((int)this->m_vpollarr[n].fd, epolstatus::eSOCKERROR);
 				this->addlog(epollogtype::eTEST, "%s, event id %d POLLERR.", __func__, this->m_vpollarr[n].fd);
+				this->closeeventid((int)this->m_vpollarr[n].fd, epolstatus::eSOCKERROR);
 				continue;
 			}
 
 			if (this->m_vpollarr[n].revents & POLLNVAL) {
-				this->closeeventid((int)this->m_vpollarr[n].fd, epolstatus::eSOCKERROR);
 				this->addlog(epollogtype::eTEST, "%s, event id %d POLLNVAL.", __func__, this->m_vpollarr[n].fd);
+				this->closeeventid((int)this->m_vpollarr[n].fd, epolstatus::eSOCKERROR);
 				continue;
 			}
 
@@ -245,16 +243,16 @@ void clibpoll::_loop(uint32_t timeout)
 
 			if ((this->m_vpollarr[n].revents & POLLIN) && ((ctx->m_type & (unsigned char)epoliotype::eRECV_IO) == (unsigned char)epoliotype::eRECV_IO)) {
 				if (!this->handlereceive(ctx)) {
-					this->closeeventid((int)this->m_vpollarr[n].fd, epolstatus::eSOCKERROR);
 					this->addlog(epollogtype::eTEST, "%s, event id %d POLLIN.", __func__, this->m_vpollarr[n].fd);
+					this->closeeventid((int)this->m_vpollarr[n].fd, epolstatus::eSOCKERROR);
 					continue;
 				}
 			}
 
 			if (this->m_vpollarr[n].revents & POLLOUT && ((ctx->m_type & (unsigned char)epoliotype::eSEND_IO) == (unsigned char)epoliotype::eSEND_IO)) {
 				if (!this->handlesend(ctx)) {
-					this->closeeventid((int)this->m_vpollarr[n].fd, epolstatus::eSOCKERROR);
 					this->addlog(epollogtype::eTEST, "%s, event id %d POLLOUT.", __func__, this->m_vpollarr[n].fd);
+					this->closeeventid((int)this->m_vpollarr[n].fd, epolstatus::eSOCKERROR);
 				}
 			}
 		}
@@ -888,8 +886,6 @@ void clibpoll::closeeventid(int event_id, epolstatus flag)
 			shutdown(ctx->m_socket, SD_BOTH);
 			ctx->m_shutdown = true;
 			this->addlog(epollogtype::eDEBUG, "%s(), event id %d socket %d shutdown.", __func__, event_id, (int)ctx->m_socket);
-			if (ctx->eventcb != NULL)
-				ctx->eventcb(this, event_id, epolstatus::eSHUTDOWN, ctx->arg);
 		}
 		break;
 	case epolstatus::eCLOSED:
@@ -943,14 +939,14 @@ void clibpoll::addlog(epollogtype type, const char* msg, ...)
 }
 
 sock_t clibpoll::getsocket(int event_id) {
-	LPPOL_PS_CTX _ctx = this->getctx(event_id, true);
+	LPPOL_PS_CTX _ctx = this->getctx(event_id);
 	if (_ctx == NULL)
 		return -1;
 	return _ctx->m_socket;
 }
 
 void clibpoll::getipaddr(int event_id, char* ipaddr) {
-	LPPOL_PS_CTX _ctx = this->getctx(event_id, true);
+	LPPOL_PS_CTX _ctx = this->getctx(event_id);
 	if (_ctx == NULL || ipaddr == NULL)
 		return;
 	strcpy(ipaddr, _ctx->m_ipaddr);
@@ -964,7 +960,7 @@ void clibpoll::setindex(int event_id, intptr_t index) {
 }
 
 intptr_t clibpoll::getindex(int event_id) {
-	LPPOL_PS_CTX _ctx = this->getctx(event_id, true);
+	LPPOL_PS_CTX _ctx = this->getctx(event_id);
 	if (_ctx == NULL)
 		return -1;
 	return _ctx->m_index;

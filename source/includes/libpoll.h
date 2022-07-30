@@ -1,9 +1,13 @@
 #pragma once
 /**
+	@file libpoll.h
+*/
+
+/**
 	@version libpoll 1.x.x
 */
 #define _LIBPOLL_MAJOR_VER_ 0x01
-#define _LIBPOLL_MINOR_VER_ 0x02
+#define _LIBPOLL_MINOR_VER_ 0x03
 #define _LIBPOLL_PATCH_VER_ 0x04
 
 /*
@@ -29,11 +33,6 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-
- /**
-	 @file libpoll.h
- */
-#pragma once
 #ifdef _WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
@@ -128,11 +127,14 @@ enum class epollogtype
 */
 enum class epolstatus
 {
+	/*socket is connected*/
 	eCONNECTED,
+	/*socket recv and send are disbled*/
 	eSHUTDOWN,
+	/*socket error*/
 	eSOCKERROR,
+	/*socket is closed*/
 	eCLOSED,
-	eNOEVENCB
 };
 
 typedef void pol;
@@ -288,7 +290,7 @@ public:
 	bool setctx(int event_id, LPPOL_PS_CTX ctx);
 	void enablecustomctx() { this->m_customctx = true; }
 
-	LPPOL_PS_CTX getctx(int event_id, bool ignoreremoved=false);
+	LPPOL_PS_CTX getctx(int event_id);
 	void deletectx(LPPOL_PS_CTX ctx);
 
 	std::recursive_mutex m;

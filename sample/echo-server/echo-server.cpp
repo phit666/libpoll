@@ -18,7 +18,7 @@ int main()
 {
     std::signal(SIGINT, signal_handler);
 
-    polbase* base = polnewbase(logger, (unsigned int)epollogtype::eTEST);
+    polbase* base = polnewbase(logger);
     gbase = base;
     pollisten(base, 3000, acceptcb, NULL);
 
@@ -51,8 +51,7 @@ static bool readcb(polbase* base, int eventid, void* arg)
     
     printf(">>> Client message : %s\n", buff);
 
-    //polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
-    polclosesocket(base, eventid);
+    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
 
     return true;
 }
@@ -68,8 +67,6 @@ static void eventcb(polbase* base, int eventid, epolstatus type, void* arg)
             ipaddr, polgetsocket(base, eventid));
         break;
     case epolstatus::eCLOSED:
-        break;
-    case epolstatus::eSOCKERROR:
         polgetipaddr(base, eventid, ipaddr);
         poladdlog(base, epollogtype::eINFO, "client disconnected, ip:%s socket:%d",
             ipaddr, polgetsocket(base, eventid));
