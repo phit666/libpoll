@@ -21,11 +21,13 @@
   <ItemGroup>
     <ClCompile Include="..\..\source\libpoll-wrapper.cpp" />
     <ClCompile Include="..\..\source\libpoll.cpp" />
+    <ClCompile Include="..\..\source\wepoll.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\source\includes\libpoll-config.h" />
     <ClInclude Include="..\..\source\includes\libpoll-wrapper.h" />
     <ClInclude Include="..\..\source\includes\libpoll.h" />
+    <ClInclude Include="..\..\source\wepoll.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
@@ -59,7 +61,7 @@
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <CharacterSet>Unicode</CharacterSet>
+    <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -180,10 +182,11 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <Optimization />
-      <InlineFunctionExpansion />
+      <Optimization>MaxSpeed</Optimization>
+      <InlineFunctionExpansion>Default</InlineFunctionExpansion>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <BufferSecurityCheck>false</BufferSecurityCheck>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
     </ClCompile>
     <Link>
       <SubSystem>

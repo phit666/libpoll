@@ -7,7 +7,7 @@
 	@version libpoll 1.x.x
 */
 #define _LIBPOLL_MAJOR_VER_ 0x01
-#define _LIBPOLL_MINOR_VER_ 0x03
+#define _LIBPOLL_MINOR_VER_ 0x04
 #define _LIBPOLL_PATCH_VER_ 0x04
 
 /*
@@ -51,7 +51,7 @@ typedef WSAPOLLFD _pollfd;
 #pragma comment(lib, "ws2_32.lib")
 #else
 #include <sys/ioctl.h>
-#include <sys/poll.h>
+#include <sys/epoll.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -68,8 +68,9 @@ typedef WSAPOLLFD _pollfd;
 #define SOCKERR errno
 #define INVALID_SOCKET -1
 #define SOCKET_ERROR -1
+#define SD_BOTH SHUT_RDWR
 typedef int sock_t;
-typedef pollfd _pollfd;
+typedef int HANDLE;
 uint32_t GetTickCount();
 #endif
 
@@ -90,8 +91,14 @@ uint32_t GetTickCount();
 #endif
 
 #define POL_MAX_CONT_REALLOC_REQ		100			
+#define POL_MAX_EVENTS 64
 
-#define CONNECT_FLAG_MAIN_THREAD 1
+#define DISPATCH_LOOP_ONCE 1
+#define DISPATCH_DONT_BLOCK 2
+
+#define DISPATCH_STATE_READ 1
+#define DISPATCH_STATE_WRITE 2
+#define DISPATCH_STATE_ADDED 4
 
 enum class epoliotype
 {
@@ -218,6 +225,9 @@ typedef struct _POL_PS_CTX
 		arg2 = NULL;
 		_this = NULL;
 		m_shutdown = false;
+		m_once = false;
+		m_rawread = false;
+		m_state = 0;
 	}
 
 	void clear2()
@@ -228,7 +238,6 @@ typedef struct _POL_PS_CTX
 		m_type = -1;
 		m_initbuflen = 0;
 		m_connected = false;
-		m_pendingsend = false;
 		memset(m_ipaddr, 0, sizeof(m_ipaddr));
 		recvcb = NULL;
 		eventcb = NULL;
@@ -240,6 +249,9 @@ typedef struct _POL_PS_CTX
 		arg2 = NULL;
 		_this = NULL;
 		m_shutdown = false;
+		m_once = false;
+		m_rawread = false;
+		m_state = 0;
 	}
 
 
@@ -250,7 +262,6 @@ typedef struct _POL_PS_CTX
 	unsigned char m_type;
 	char m_ipaddr[16];
 	bool m_connected;
-	bool m_pendingsend;
 	unsigned int m_conipaddr;
 	unsigned int m_conport;
 	unsigned int m_initbuflen;
@@ -260,7 +271,11 @@ typedef struct _POL_PS_CTX
 	void* arg2;
 	void* _this;
 	bool m_shutdown;
+	bool m_once;
+	bool m_rawread;
+	int m_state;
 } POL_PS_CTX, *LPPOL_PS_CTX;
+
 
 class clibpoll
 {
@@ -269,7 +284,7 @@ public:
 	~clibpoll();
 	void init(polloghandler loghandler=NULL, unsigned int logverboseflags = -1,
 		size_t initclt2ndbufsize = NULL, size_t initsvr2ndbufsize = NULL);
-	void dispatch();
+	void dispatch(unsigned int flags=0);
 	void dispatchbreak();
 	void listen(int listenport, polacceptcb acceptcb, void* arg, char* listenip=NULL);
 	void setacceptcbargument(void* arg);
@@ -297,10 +312,8 @@ public:
 
 private:
 
-	void loop();
-	void _loop(uint32_t timeout);
-	void makepollfdarr();
-	std::vector<_pollfd> m_vpollarr;
+	void loop(uint32_t timeout);
+	void setepolevent(sock_t s, uint32_t cmd, uint32_t flags, LPPOL_PS_CTX ctx);
 
 	intptr_t m_tindex;
 	polloghandler fnc_loghandler;
@@ -312,6 +325,7 @@ private:
 	bool handleconnect(LPPOL_PS_CTX ctx);
 	int handlereceive(LPPOL_PS_CTX ctx);
 	bool handlesend(LPPOL_PS_CTX ctx);
+
 	void closeeventid(int event_id, epolstatus flag = epolstatus::eSHUTDOWN);
 	void clear();
 	void deleventid(int eventid);
@@ -322,12 +336,13 @@ private:
 	sock_t m_listensocket;
 
 	LPPOL_PS_CTX m_acceptctx;
-	int m_accepteventid;
+	uint32_t m_accepteventid;
 
 	size_t m_initcltextbuffsize;
 	size_t m_initsvrextbuffsize;
 
 	std::map<int, LPPOL_PS_CTX>m_polmaps;
+	bool m_polmapsupdated;
 
 	unsigned int m_logverboseflags;
 	
@@ -340,7 +355,10 @@ private:
 	bool m_customctx;
 	bool m_loopbreak;
 
-	int m_ftid;
+	unsigned int m_dispatchflags;
+	std::thread* m_t;
+	bool m_tstarted;
+	HANDLE m_epollfd;
 };
 
 
