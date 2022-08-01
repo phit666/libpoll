@@ -34,14 +34,10 @@
  * SOFTWARE.
  */
 #ifdef _WIN32
-#define _CRT_SECURE_NO_WARNINGS
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
-#define NO_WARN_MBCS_MFC_DEPRECATION
-#define WIN32_LEAN_AND_MEAN		// Exclude rarely-used stuff from Windows headers
-
 #include <WinSock2.h>
 #include <ws2ipdef.h>
 #include <Ws2tcpip.h>
+#include "wepoll.h"
 typedef SOCKET sock_t;
 typedef WSAPOLLFD _pollfd;
 #define SOCKERR WSAGetLastError()
@@ -84,8 +80,6 @@ uint32_t GetTickCount();
 #include <assert.h>
 #include "libpoll-config.h"
 
-
-
 #ifndef POL_MAX_IO_BUFFER_SIZE
 #define POL_MAX_IO_BUFFER_SIZE		8192
 #endif
@@ -95,10 +89,6 @@ uint32_t GetTickCount();
 
 #define DISPATCH_LOOP_ONCE 1
 #define DISPATCH_DONT_BLOCK 2
-
-#define DISPATCH_STATE_READ 1
-#define DISPATCH_STATE_WRITE 2
-#define DISPATCH_STATE_ADDED 4
 
 enum class epoliotype
 {
@@ -191,11 +181,11 @@ typedef struct _POL_PIO_CTX
 	}
 	char Buffer[POL_MAX_IO_BUFFER_SIZE];
 	char* pBuffer;
-	int pBufferLen;
+	size_t pBufferLen;
 	int pReallocCounts;
-	int nSecondOfs;
+	size_t nSecondOfs;
 	int nTotalBytes;
-	int nSentBytes;
+	size_t nSentBytes;
 	int nWaitIO;
 } POL_PIO_CTX, * LPPOL_PIO_CTX;
 

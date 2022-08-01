@@ -27,7 +27,6 @@
  */
 
 #pragma once
-
 #define POL_MAX_IO_BUFFER_SIZE		8192
 
 

@@ -1,6 +1,3 @@
-#ifdef _WIN32
-#include "wepoll.h"
-#endif
 #include "includes/libpoll.h"
 #include "includes/libpoll-wrapper.h"
 #include <time.h>
@@ -370,11 +367,7 @@ sock_t clibpoll::createsocket(bool nonblocking)
 {
 	sock_t s = INVALID_SOCKET;
 	unsigned long uNonBlockingMode = 1;
-#ifdef _WIN32
-	s = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_IP, NULL, 0, NULL);
-#else
 	s = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-#endif
 	if (s == INVALID_SOCKET) {
 		this->addlog(epollogtype::eERROR, "%s(), WSASocket failed: %d.", __func__, SOCKERR);
 		return s;
@@ -805,7 +798,7 @@ bool clibpoll::handlesend(LPPOL_PS_CTX ctx)
 	if (ctx->IOContext[1].nSecondOfs > 0) {
 		if (ctx->IOContext[1].nSecondOfs <= POL_MAX_IO_BUFFER_SIZE) {
 			memcpy(ctx->IOContext[1].Buffer, ctx->IOContext[1].pBuffer, ctx->IOContext[1].nSecondOfs);
-			ctx->IOContext[1].nTotalBytes = ctx->IOContext[1].nSecondOfs;
+			ctx->IOContext[1].nTotalBytes = static_cast<int>(ctx->IOContext[1].nSecondOfs);
 			ctx->IOContext[1].nSecondOfs = 0;
 		}
 		else {
