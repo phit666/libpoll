@@ -8,7 +8,7 @@
 */
 #define _LIBPOLL_MAJOR_VER_ 0x01
 #define _LIBPOLL_MINOR_VER_ 0x04
-#define _LIBPOLL_PATCH_VER_ 0x05
+#define _LIBPOLL_PATCH_VER_ 0x06
 
 /*
  * MIT License
@@ -37,7 +37,6 @@
 #include <WinSock2.h>
 #include <ws2ipdef.h>
 #include <Ws2tcpip.h>
-#include "wepoll.h"
 typedef SOCKET sock_t;
 typedef WSAPOLLFD _pollfd;
 #define SOCKERR WSAGetLastError()
