@@ -110,7 +110,8 @@ bool polconnect(polbase* base, int eventid, char* initbuf, int initlen);
 bool polisconnected(polbase* base, int eventid);
 
 /**
-	Start dispatching events.
+	Start dispatching events. This can be called in single thread or multi threads (cpu core * 2), echo-client is single threaded 
+	and echo-server is multi threaded.
 	@param base					pol base from polnewbase call.
 	@param flags				currently supported flag for now is DISPATCH_DONT_BLOCK, this flag will cause the dispatch to return immediately after fetching
 								socket events, setting this flag to default NULL will make poldispatch a blocking call looping for socket events.

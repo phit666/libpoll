@@ -15,18 +15,19 @@ int main()
 {
     char sbuf[100] = { 0 };
 
-    std::signal(SIGINT, signal_handler);
-
-    polbase* base = polnewbase(logger);
+    polbase* base = polnewbase(logger, NULL);
     gbase = base;
 
-    for (int n = 0; n < 2; n++) {
+    for (int n = 0; n < 10; n++) {
 		sprintf_s(sbuf, 100, "Hello World!"); /**the initial data to send upon connection*/
 		int eventid = polconnect(base, "127.0.0.1", 3000, sbuf, strlen(sbuf)+1); /**set the initial buf size to 0 if there has no initial data to send*/
         polsetcb(base, eventid, readcb, NULL, (void*)n);
     }
 
+    std::signal(SIGINT, signal_handler);
     std::cout << "press Ctrl-C to exit.\n";
+
+    /*single threaded dispatching of events*/
     poldispatch(base); 
 
     std::cout << "dispatchbreak called, cleaning the mess up...\n";

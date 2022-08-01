@@ -8,7 +8,7 @@
 */
 #define _LIBPOLL_MAJOR_VER_ 0x01
 #define _LIBPOLL_MINOR_VER_ 0x04
-#define _LIBPOLL_PATCH_VER_ 0x06
+#define _LIBPOLL_PATCH_VER_ 0x07
 
 /*
  * MIT License
@@ -55,7 +55,7 @@ typedef WSAPOLLFD _pollfd;
 #include <errno.h>
 #include <unistd.h>
 #include <stdarg.h>
-#define _poll poll
+#define epoll_close close
 #define closesocket close
 #define ioctlsocket ioctl
 #define SOCKCONNBLOCK EINPROGRESS
@@ -84,7 +84,7 @@ uint32_t GetTickCount();
 #endif
 
 #define POL_MAX_CONT_REALLOC_REQ		100			
-#define POL_MAX_EVENTS 64
+#define POL_MAX_EVENTS 10
 
 #define DISPATCH_LOOP_ONCE 1
 #define DISPATCH_DONT_BLOCK 2
@@ -300,6 +300,8 @@ public:
 	std::recursive_mutex m;
 
 private:
+
+	std::recursive_mutex _m;
 
 	void loop(uint32_t timeout);
 	void setepolevent(sock_t s, uint32_t cmd, uint32_t flags, LPPOL_PS_CTX ctx);

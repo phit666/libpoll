@@ -1,5 +1,5 @@
 #ifdef _WIN32
-#include "wepoll.h"
+#include "third_party/wepoll.h"
 #endif
 #include "includes/libpoll.h"
 #include "includes/libpoll-wrapper.h"
@@ -32,13 +32,9 @@ clibpoll::clibpoll()
 clibpoll::~clibpoll()
 {
 	this->addlog(epollogtype::eINFO, "%s(), class destructor called.", __func__);
-	if (this->m_t != nullptr) {
-		this->m_t->join();
-		delete this->m_t;
-	}
 	this->clear();
+	epoll_close(this->m_epollfd);
 #ifdef _WIN32
-	CloseHandle(this->m_epollfd);
 	WSACleanup();
 #endif
 }
@@ -150,11 +146,14 @@ void clibpoll::init(polloghandler loghandler, unsigned int logverboseflags, size
 void clibpoll::loop(uint32_t timeout)
 {
 	epoll_event events[POL_MAX_EVENTS] = { 0 };
+	std::thread::id tid = std::this_thread::get_id();
+
+	std::lock_guard<std::recursive_mutex> _lk(_m);
 
 	int nfds = epoll_wait(this->m_epollfd, events, POL_MAX_EVENTS, timeout);
 
 	std::lock_guard<std::recursive_mutex> lk(m);
-	
+
 	if (nfds == -1) {
 		return;
 	}
@@ -179,8 +178,6 @@ void clibpoll::loop(uint32_t timeout)
 				continue;
 			}
 
-			this->addlog(epollogtype::eTEST, "%s, event id %d events: %d (%d)", __func__, 
-				s, events[n].events, nfds);
 
 			if (events[n].events & EPOLLHUP || (events[n].events & EPOLLRDHUP)) {
 				this->addlog(epollogtype::eTEST, "%s, event id %d EPOLLHUP.", __func__, ctx->m_eventid);
@@ -210,6 +207,7 @@ void clibpoll::loop(uint32_t timeout)
 
 			if (((events[n].events & EPOLLIN) || (events[n].events & EPOLLPRI))
 				&& ((ctx->m_type & (unsigned char)epoliotype::eRECV_IO) == (unsigned char)epoliotype::eRECV_IO)) {
+				this->addlog(epollogtype::eTEST, "%s, event id %d EPOLLIN, tid:%d", __func__, ctx->m_eventid, tid);
 				if (!this->handlereceive(ctx)) {
 					this->closeeventid(ctx->m_eventid, epolstatus::eSOCKERROR);
 					continue;
@@ -218,6 +216,7 @@ void clibpoll::loop(uint32_t timeout)
 
 			if (events[n].events & EPOLLOUT && 
 				((ctx->m_type & (unsigned char)epoliotype::eSEND_IO) == (unsigned char)epoliotype::eSEND_IO)) {
+				this->addlog(epollogtype::eTEST, "%s, event id %d EPOLLIN, tid:%d", __func__, ctx->m_eventid, tid);
 				if (!this->handlesend(ctx)) {
 					this->closeeventid(ctx->m_eventid, epolstatus::eSOCKERROR);
 					continue;
@@ -230,7 +229,7 @@ void clibpoll::loop(uint32_t timeout)
 void clibpoll::dispatch(unsigned int flags)
 {
 	this->m_dispatchflags = flags;
-	uint32_t timeout = (flags & DISPATCH_DONT_BLOCK) ? 0 : 1000;
+	uint32_t timeout = (flags & DISPATCH_DONT_BLOCK) ? 0 : 1;
 	while (true) {
 		this->loop(timeout);
 		if (this->m_loopbreak || (flags & DISPATCH_DONT_BLOCK)) {
@@ -241,7 +240,6 @@ void clibpoll::dispatch(unsigned int flags)
 
 void clibpoll::dispatchbreak()
 {
-	std::lock_guard<std::recursive_mutex> lk(m);
 	this->m_loopbreak = true;
 }
 
@@ -862,7 +860,6 @@ void clibpoll::closefd(int event_id)
 
 void clibpoll::closeeventid(int event_id, epolstatus flag)
 {
-	sock_t s = INVALID_SOCKET;
 	std::lock_guard<std::recursive_mutex> lk(m);
 	LPPOL_PS_CTX ctx = this->getctx(event_id);
 
@@ -879,22 +876,22 @@ void clibpoll::closeeventid(int event_id, epolstatus flag)
 		this->closeeventid(event_id, epolstatus::eCLOSED);
 		break;
 	case epolstatus::eCLOSED:
+
+		if (ctx->eventcb != NULL)
+			ctx->eventcb(this, event_id, epolstatus::eCLOSED, ctx->arg);
+
+		this->deleventid(event_id);
+
 		if (ctx->m_socket != INVALID_SOCKET) {
+			this->setepolevent(ctx->m_socket, EPOLL_CTL_DEL, 0, ctx);
 			::closesocket(ctx->m_socket);
 			this->addlog(epollogtype::eDEBUG, "%s(), event id %d socket %d closed.", __func__, event_id, (int)ctx->m_socket);
-			if (ctx->eventcb != NULL)
-				ctx->eventcb(this, event_id, epolstatus::eCLOSED, ctx->arg);
-			s = ctx->m_socket;
 			ctx->m_socket = INVALID_SOCKET;
 		}
 		if (this->m_customctx == false) {
-			this->deleventid(event_id);
-			this->setepolevent(s, EPOLL_CTL_DEL, 0, ctx);
 			this->deletectx(ctx);
 		}
 		else {
-			this->deleventid(event_id);
-			this->setepolevent(s, EPOLL_CTL_DEL, 0, ctx);
 			ctx->clear2();
 		}
 		break;
