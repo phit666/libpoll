@@ -8,7 +8,7 @@
 */
 #define _LIBPOLL_MAJOR_VER_ 0x01
 #define _LIBPOLL_MINOR_VER_ 0x04
-#define _LIBPOLL_PATCH_VER_ 0x04
+#define _LIBPOLL_PATCH_VER_ 0x05
 
 /*
  * MIT License
@@ -326,7 +326,7 @@ private:
 	int handlereceive(LPPOL_PS_CTX ctx);
 	bool handlesend(LPPOL_PS_CTX ctx);
 
-	void closeeventid(int event_id, epolstatus flag = epolstatus::eSHUTDOWN);
+	void closeeventid(int event_id, epolstatus flag = epolstatus::eCLOSED);
 	void clear();
 	void deleventid(int eventid);
 

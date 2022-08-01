@@ -765,7 +765,7 @@ int clibpoll::handlereceive(LPPOL_PS_CTX ctx)
 			if (size == SOCKET_ERROR) {
 				this->addlog(epollogtype::eERROR, "%s, event id %d recv error %d.", __func__, (int)eventid, SOCKERR);
 			}
-			return size;
+			return 0;
 		}
 		lpIOContext->nSentBytes += size;
 	}
@@ -855,7 +855,7 @@ size_t clibpoll::readbuffer(int event_id, char* buffer, size_t buffersize)
 void clibpoll::closefd(int event_id)
 {
 	std::lock_guard<std::recursive_mutex> lk(m);
-	this->closeeventid(event_id, epolstatus::eSHUTDOWN);
+	this->closeeventid(event_id);
 }
 
 void clibpoll::closeeventid(int event_id, epolstatus flag)
@@ -874,13 +874,6 @@ void clibpoll::closeeventid(int event_id, epolstatus flag)
 		if (ctx->eventcb != NULL)
 			ctx->eventcb(this, event_id, epolstatus::eSOCKERROR, ctx->arg);
 		this->closeeventid(event_id, epolstatus::eCLOSED);
-		break;
-	case epolstatus::eSHUTDOWN:
-		if (ctx->m_socket != INVALID_SOCKET && ctx->m_shutdown == false) {
-			shutdown(ctx->m_socket, SD_BOTH);
-			ctx->m_shutdown = true;
-			this->addlog(epollogtype::eDEBUG, "%s(), event id %d socket %d shutdown.", __func__, event_id, (int)ctx->m_socket);
-		}
 		break;
 	case epolstatus::eCLOSED:
 		if (ctx->m_socket != INVALID_SOCKET) {
