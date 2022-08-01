@@ -9,10 +9,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -24,19 +24,19 @@
 #pragma once
 #include "libpoll.h"
 
-/**
-	@file libpoll-wrapper.h
-*/
+ /**
+	 @file libpoll-wrapper.h
+ */
 
-/**
-	stpolConnectInfo struct store the newly connected IP address and socket, this is only use when polenablecustomcontext is called 
-	because when the custom context is provided the IP address and socket info will not available in the custom context inside the 
-	accept callback. LpstpolProxyInfo pointer should be passed as accept callback's argument to pollisten call then inside the accept
-	callback cast the argument to LpstProxyInfo to fetch the IP address and socket info.
+ /**
+	 stpolConnectInfo struct store the newly connected IP address and socket, this is only use when polenablecustomcontext is called
+	 because when the custom context is provided the IP address and socket info will not available in the custom context inside the
+	 accept callback. LpstpolProxyInfo pointer should be passed as accept callback's argument to pollisten call then inside the accept
+	 callback cast the argument to LpstProxyInfo to fetch the IP address and socket info.
 
-	@param s				Socket info of the newly connected client.
-	@param ipaddr			IP address of the newly connected client.
-*/
+	 @param s				Socket info of the newly connected client.
+	 @param ipaddr			IP address of the newly connected client.
+ */
 typedef struct _stpolConnectInfo {
 	sock_t s;
 	char ipaddr[16];
@@ -50,10 +50,10 @@ typedef struct _stpolConnectInfo {
 								OutputDebugString when set to NULL.
 		@param logverboseflags	Bit flags of enum class emuelogtype for filtering
 								type of log to be shown.
-		@param connect2ndbuffer	This is a dynamic buffer storage that will expand as required by the data allocation size needed to be sent. 
+		@param connect2ndbuffer	This is a dynamic buffer storage that will expand as required by the data allocation size needed to be sent.
 		@return					pol base.
 */
-polbase * polnewbase(polloghandler loghandler=0, unsigned int logverboseflags=(unsigned int)-1, int connect2ndbuffer=0);
+polbase* polnewbase(polloghandler loghandler = 0, unsigned int logverboseflags = (unsigned int)-1, int connect2ndbuffer = 0);
 
 /**
 	Start accepting connections.
@@ -63,7 +63,7 @@ polbase * polnewbase(polloghandler loghandler=0, unsigned int logverboseflags=(u
 								processing client newly connected.
 	@param arg					Variable  you want to pass to Accept callback.
 */
-void pollisten(polbase* base, unsigned short int port, polacceptcb acceptcb, void* arg=0, char* listenip=NULL);
+void pollisten(polbase* base, unsigned short int port, polacceptcb acceptcb, void* arg = 0, char* listenip = NULL);
 
 /**
 	Connect this server to another server.
@@ -77,7 +77,7 @@ void pollisten(polbase* base, unsigned short int port, polacceptcb acceptcb, voi
 	@param ctx					User provided pointer to POL_PS_CTX struct, this is required if polenablecustomcontext has been called.
 	@return						-1 on failure and pol event id on success.
 */
-int polconnect(polbase* base, const char* ipaddr, unsigned short int port, char *initbuf, int initlen, int flag=0, LPPOL_PS_CTX ctx=NULL);
+int polconnect(polbase* base, const char* ipaddr, unsigned short int port, char* initbuf, int initlen, int flag = 0, LPPOL_PS_CTX ctx = NULL);
 
 /**
 	Make the connection setup only but don't connect.
@@ -88,7 +88,7 @@ int polconnect(polbase* base, const char* ipaddr, unsigned short int port, char 
 	@param ctx					User provided pointer to POL_PS_CTX struct, this is required if polenablecustomcontext has been called.
 	@return						-1 on failure and pol event id on success.
 */
-int polmakeconnect(polbase* base, const char* ipaddr, unsigned short int port, int flag = 0, LPPOL_PS_CTX ctx=NULL);
+int polmakeconnect(polbase* base, const char* ipaddr, unsigned short int port, int flag = 0, LPPOL_PS_CTX ctx = NULL);
 
 /**
 	Connect to another server based on the parameters of polmakeconnect call.
@@ -102,7 +102,7 @@ bool polconnect(polbase* base, int eventid, char* initbuf, int initlen);
 
 /**
 	Check if the call to polconnect really made, call to polconnect will return true immediately if there has no socket error but the IO is still
-	pending, calling polisconnected will get the real connection status. 
+	pending, calling polisconnected will get the real connection status.
 	@param base					pol base from polnewbase call.
 	@param event_id				pol event id from polmakeconnect call.
 	@return						true if connected and false if not.
@@ -110,10 +110,12 @@ bool polconnect(polbase* base, int eventid, char* initbuf, int initlen);
 bool polisconnected(polbase* base, int eventid);
 
 /**
-	Start mueevent, this is a blocking call as it will loop continuesly to poll for socket events.
+	Start dispatching events.
 	@param base					pol base from polnewbase call.
+	@param flags				currently supported flag for now is DISPATCH_DONT_BLOCK, this flag will cause the dispatch to return immediately after fetching
+								socket events, setting this flag to default NULL will make poldispatch a blocking call looping for socket events.
 */
-void poldispatch(polbase* base, unsigned int flags=0);
+void poldispatch(polbase* base, unsigned int flags = 0);
 
 /**
 	Set the read and event callback of pol object.
@@ -259,7 +261,7 @@ void* polgetcustomarg(polbase* base, int event_id);
 void polenablecustomcontext(polbase* base);
 
 /**
-	Set the user provided POL_PS_CTX struct pointer with the event id, this can only be called inside accept callback. 
+	Set the user provided POL_PS_CTX struct pointer with the event id, this can only be called inside accept callback.
 	@param base					pol base from polnewbase call.
 	@param event_id				pol event id.
 	@param ctx					User created pointer to POL_PS_CTX struct.
@@ -268,7 +270,7 @@ void polenablecustomcontext(polbase* base);
 bool polsetcustomcontext(polbase* base, int event_id, LPPOL_PS_CTX ctx);
 
 /**
-	Delete the user provided POL_PS_CTX struct pointer, this must be called by the user upon exit. 
+	Delete the user provided POL_PS_CTX struct pointer, this must be called by the user upon exit.
 	@param base					pol base from polnewbase call.
 	@param ctx					User created pointer to POL_PS_CTX struct.
 */
