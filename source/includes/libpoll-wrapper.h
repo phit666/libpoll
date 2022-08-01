@@ -113,10 +113,14 @@ bool polisconnected(polbase* base, int eventid);
 	Start dispatching events. This can be called in single thread or multi threads (cpu core * 2), echo-client is single threaded 
 	and echo-server is multi threaded.
 	@param base					pol base from polnewbase call.
+	@param timeout				if timeout is INFINITE, poldispatch will only loop when any of the registered sockets has a triggered event, if timeout is 0
+								poldispatch will immediately loop and fetch any activated socket events but use this only if flag is set to DISPATCH_DONT_BLOCK
+								and if timeout is more than 0, poldispatch will loop even without activated socket events when timeout expired, for multi threaded
+								poldispatch set the timeout to 1.
 	@param flags				currently supported flag for now is DISPATCH_DONT_BLOCK, this flag will cause the dispatch to return immediately after fetching
 								socket events, setting this flag to default NULL will make poldispatch a blocking call looping for socket events.
 */
-void poldispatch(polbase* base, unsigned int flags = 0);
+void poldispatch(polbase* base, unsigned int timeout=INFINITE, unsigned int flags = 0);
 
 /**
 	Set the read and event callback of pol object.

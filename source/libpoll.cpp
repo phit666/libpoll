@@ -33,9 +33,12 @@ clibpoll::~clibpoll()
 {
 	this->addlog(epollogtype::eINFO, "%s(), class destructor called.", __func__);
 	this->clear();
+	this->addlog(epollogtype::eINFO, "%s(), clear done.", __func__);
 	epoll_close(this->m_epollfd);
+	this->addlog(epollogtype::eINFO, "%s(), epoll_close done.", __func__);
 #ifdef _WIN32
 	WSACleanup();
+	this->addlog(epollogtype::eINFO, "%s(), WSACleanup done.", __func__);
 #endif
 }
 
@@ -49,8 +52,10 @@ void clibpoll::clear()
 			_ctx = iterq->second;
 			if (_ctx != NULL) {
 				this->addlog(epollogtype::eINFO, "%s(), closing event id %d.", __func__, _ctx->m_eventid);
-				if (_ctx->m_socket != INVALID_SOCKET)
+				if (_ctx->m_socket != INVALID_SOCKET) {
+					this->setepolevent(_ctx->m_socket, EPOLL_CTL_DEL, 0, _ctx);
 					closesocket(_ctx->m_socket);
+				}
 				this->deletectx(_ctx);
 			}
 		}
@@ -143,11 +148,8 @@ void clibpoll::init(polloghandler loghandler, unsigned int logverboseflags, size
 	}
 }
 
-void clibpoll::loop(uint32_t timeout)
+void clibpoll::loop(uint32_t timeout, std::thread::id tid, epoll_event* events)
 {
-	epoll_event events[POL_MAX_EVENTS] = { 0 };
-	std::thread::id tid = std::this_thread::get_id();
-
 	std::lock_guard<std::recursive_mutex> _lk(_m);
 
 	int nfds = epoll_wait(this->m_epollfd, events, POL_MAX_EVENTS, timeout);
@@ -226,12 +228,16 @@ void clibpoll::loop(uint32_t timeout)
 	}
 }
 
-void clibpoll::dispatch(unsigned int flags)
+void clibpoll::dispatch(uint32_t timeout, unsigned int flags)
 {
 	this->m_dispatchflags = flags;
-	uint32_t timeout = (flags & DISPATCH_DONT_BLOCK) ? 0 : 1;
+	epoll_event events[POL_MAX_EVENTS] = { 0 };
+	std::thread::id tid = std::this_thread::get_id();
+
+	this->addlog(epollogtype::eDEBUG, "%s, started with thread id: %u", __func__, tid);
+
 	while (true) {
-		this->loop(timeout);
+		this->loop(timeout, tid, events);
 		if (this->m_loopbreak || (flags & DISPATCH_DONT_BLOCK)) {
 			break;
 		}

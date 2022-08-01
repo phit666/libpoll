@@ -36,9 +36,9 @@ void polsetreadeventcbargument(polbase* base, int event_id, void* arg) {
 	poll->setreadeventcbargument(event_id, arg);
 }
 
-void poldispatch(polbase* base, unsigned int flags) {
+void poldispatch(polbase* base, unsigned int timeout, unsigned int flags) {
 	clibpoll* poll = (clibpoll*)base;
-	poll->dispatch(flags);
+	poll->dispatch(timeout, flags);
 }
 
 int polconnect(polbase* base, const char* ipaddr, unsigned short int port, char* initbuf, int initlen, int flag, LPPOL_PS_CTX ctx) {

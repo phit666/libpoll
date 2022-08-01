@@ -7,7 +7,7 @@
 	@version libpoll 1.x.x
 */
 #define _LIBPOLL_MAJOR_VER_ 0x01
-#define _LIBPOLL_MINOR_VER_ 0x04
+#define _LIBPOLL_MINOR_VER_ 0x05
 #define _LIBPOLL_PATCH_VER_ 0x07
 
 /*
@@ -273,7 +273,7 @@ public:
 	~clibpoll();
 	void init(polloghandler loghandler=NULL, unsigned int logverboseflags = -1,
 		size_t initclt2ndbufsize = NULL, size_t initsvr2ndbufsize = NULL);
-	void dispatch(unsigned int flags=0);
+	void dispatch(uint32_t timeout=INFINITE, unsigned int flags=0);
 	void dispatchbreak();
 	void listen(int listenport, polacceptcb acceptcb, void* arg, char* listenip=NULL);
 	void setacceptcbargument(void* arg);
@@ -303,7 +303,7 @@ private:
 
 	std::recursive_mutex _m;
 
-	void loop(uint32_t timeout);
+	void loop(uint32_t timeout, std::thread::id tid, struct epoll_event * events);
 	void setepolevent(sock_t s, uint32_t cmd, uint32_t flags, LPPOL_PS_CTX ctx);
 
 	intptr_t m_tindex;

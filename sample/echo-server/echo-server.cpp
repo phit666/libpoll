@@ -24,7 +24,7 @@ int main()
 
     /*multi-threaded dispatching of events. 4 thread workers are set to poll for events.*/
     for (int n = 0; n < 4; n++) {
-        t[n] = std::thread(poldispatch, base, NULL);
+        t[n] = std::thread(poldispatch, base, 1, NULL);
     }
 
     std::signal(SIGINT, signal_handler);
