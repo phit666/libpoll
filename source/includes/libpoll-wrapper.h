@@ -129,11 +129,14 @@ void poldispatch(polbase* base, unsigned int timeout=INFINITE, unsigned int flag
 	@param event_id				pol event id.
 	@param readcb				Read callback function of type polreadcb for
 								processing received data.
+	@param writecb				Write callback function of type polwritecb for
+								retrieving sent bytes (polgetsentbytes) or doing a
+								raw send.
 	@param eventcb				Event callback of type poleventcb for processing
 								connection status.
 	@param arg					Variable you want to pass to read and event callback.
 */
-void polsetcb(polbase* base, int event_id, polreadcb readcb, poleventcb eventcb, void* arg = NULL);
+void polsetcb(polbase* base, int event_id, polreadcb readcb, polwritecb writecb, poleventcb eventcb, void* arg = NULL);
 
 /**
 	Set the read and event callback of pol object.
@@ -161,7 +164,7 @@ void polsetreadeventcbargument(polbase* base, int event_id, void* arg);
 	@param dwSize				Size of data to be sent
 	@return						false when failed otherwise true if the attempt is successfull
 */
-bool polwrite(polbase* base, int event_id, unsigned char* lpMsg, unsigned int dwSize);
+bool polwrite(polbase* base, int event_id, unsigned char* lpMsg, size_t dwSize);
 
 /**
 	Read received data, call this inside the read callback.
@@ -280,3 +283,31 @@ bool polsetcustomcontext(polbase* base, int event_id, LPPOL_PS_CTX ctx);
 	@param ctx					User created pointer to POL_PS_CTX struct.
 */
 void poldelcustomcontext(polbase* base, LPPOL_PS_CTX ctx);
+
+/**
+	Retrieve the size of data in bytes sent, can only be called inside the write callback.
+	@param base					pol base from polnewbase call.
+	@param event_id				pol event id.
+	@return						Size in bytes sent or 0 when send failed.
+*/
+size_t polgetsentbytes(polbase* base, int event_id);
+
+/**
+	Set a raw read or write inside the read/write callback. When read is set to raw, the user is responsible
+	in receiving data by using recv or alike functions inside the read callback, using polread will fail if
+	read is set to raw. When write is set to raw, the user is responsible in sending data by using send or alike
+	function inside the write callback, polreqwrite function will trigger the write callback when set to raw,
+	using polwrite will fail if write is set to raw.
+	@param base					pol base from polnewbase call.
+	@param event_id				pol event id.
+	@param read					set read to raw when true.
+	@param write				set write to raw when true.
+*/
+void polsetraw(polbase* base, int event_id, bool read, bool write);
+
+/**
+	Trigger the write callback when write is set to raw.
+	@param base					pol base from polnewbase call.
+	@param event_id				pol event id.
+*/
+void polreqwrite(polbase* base, int event_id);

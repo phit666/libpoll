@@ -86,12 +86,12 @@ bool polisconnected(polbase* base, int eventid) {
 	return bret;
 }
 
-void polsetcb(polbase* base, int event_id, polreadcb readcb, poleventcb eventcb, void* arg) {
+void polsetcb(polbase* base, int event_id, polreadcb readcb, polwritecb writecb, poleventcb eventcb, void* arg) {
 	clibpoll* poll = (clibpoll*)base;
-	poll->setconnectcb(event_id, readcb, eventcb, arg);
+	poll->setconnectcb(event_id, readcb, writecb, eventcb, arg);
 }
 
-bool polwrite(polbase* base, int event_id, unsigned char* lpMsg, unsigned int dwSize) {
+bool polwrite(polbase* base, int event_id, unsigned char* lpMsg, size_t dwSize) {
 	clibpoll* poll = (clibpoll*)base;
 	return poll->sendbuffer(event_id, lpMsg, dwSize);
 }
@@ -155,8 +155,7 @@ void poladdlog(polbase* base, epollogtype type, const char* msg, ...) {
 	poll->addlog(type, szBuffer);
 }
 
-bool polsetcustomarg(polbase* base, int event_id, void* arg)
-{
+bool polsetcustomarg(polbase* base, int event_id, void* arg){
 	clibpoll* poll = (clibpoll*)base;
 	std::lock_guard<std::recursive_mutex> lk(poll->m);
 	LPPOL_PS_CTX ctx = poll->getctx(event_id);
@@ -167,8 +166,7 @@ bool polsetcustomarg(polbase* base, int event_id, void* arg)
 	return true;
 }
 
-void* polgetcustomarg(polbase* base, int event_id)
-{
+void* polgetcustomarg(polbase* base, int event_id){
 	clibpoll* poll = (clibpoll*)base;
 	void* arg = NULL;
 	std::lock_guard<std::recursive_mutex> lk(poll->m);
@@ -178,6 +176,22 @@ void* polgetcustomarg(polbase* base, int event_id)
 	}
 	return ctx->arg2;
 }
+
+size_t polgetsentbytes(polbase* base, int event_id){
+	clibpoll* poll = (clibpoll*)base;
+	return poll->getsentbytes(event_id);
+}
+
+void polsetraw(polbase* base, int event_id, bool read, bool write){
+	clibpoll* poll = (clibpoll*)base;
+	poll->setraw(event_id, read, write);
+}
+
+void polreqwrite(polbase* base, int event_id) {
+	clibpoll* poll = (clibpoll*)base;
+	poll->reqwrite(event_id);
+}
+
 
 
 

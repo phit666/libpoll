@@ -39,7 +39,7 @@ int main(int argc, char* argv[])
     memcpy(&proxyip, argv[1], sizeof(proxyip));
     memcpy(&svrip, argv[3], sizeof(svrip));
 
-    polbase* base = polnewbase(logger, (DWORD)epollogtype::eALL);
+    polbase* base = polnewbase(logger);
     gbase = base;
     pollisten(base, portProxy, acceptcb, NULL, proxyip);
     poldispatch(base);
@@ -52,10 +52,10 @@ static bool acceptcb(polbase* base, int eventid, void* arg)
     int event_id = polmakeconnect(base, svrip, portServer); // create the event id of remote connection
 
     intptr_t _event_id = static_cast<intptr_t>(event_id);
-    polsetcb(base, eventid, readcb, NULL, (void*)_event_id); // pass remote event id to client callback
+    polsetcb(base, eventid, readcb, NULL, NULL, (void*)_event_id); // pass remote event id to client callback
 
     intptr_t _eventid = static_cast<intptr_t>(eventid);
-    polsetcb(base, event_id, remote_readcb, NULL, (void*)_eventid); // pass proxy event id to remote callback
+    polsetcb(base, event_id, remote_readcb, NULL, NULL, (void*)_eventid); // pass proxy event id to remote callback
 
     return true;
 }

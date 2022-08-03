@@ -218,7 +218,7 @@ void clibpoll::loop(uint32_t timeout, std::thread::id tid, epoll_event* events)
 
 			if (events[n].events & EPOLLOUT && 
 				((ctx->m_type & (unsigned char)epoliotype::eSEND_IO) == (unsigned char)epoliotype::eSEND_IO)) {
-				this->addlog(epollogtype::eTEST, "%s, event id %d EPOLLIN, tid:%d", __func__, ctx->m_eventid, tid);
+				this->addlog(epollogtype::eTEST, "%s, event id %d EPOLLOUT, tid:%d", __func__, ctx->m_eventid, tid);
 				if (!this->handlesend(ctx)) {
 					this->closeeventid(ctx->m_eventid, epolstatus::eSOCKERROR);
 					continue;
@@ -313,7 +313,7 @@ void clibpoll::setepolevent(sock_t s, uint32_t cmd, uint32_t flags, LPPOL_PS_CTX
 	}
 }
 
-void clibpoll::setconnectcb(int event_id, polreadcb readcb, poleventcb eventcb, void* arg)
+void clibpoll::setconnectcb(int event_id, polreadcb readcb, polreadcb writecb, poleventcb eventcb, void* arg)
 {
 	LPPOL_PS_CTX _ctx = this->getctx(event_id);
 	if (_ctx == NULL) {
@@ -321,8 +321,20 @@ void clibpoll::setconnectcb(int event_id, polreadcb readcb, poleventcb eventcb, 
 		return;
 	}
 	_ctx->recvcb = readcb;
+	_ctx->sendcb = writecb;
 	_ctx->eventcb = eventcb;
 	_ctx->arg = arg;
+}
+
+void clibpoll::setraw(int event_id, bool read, bool write)
+{
+	LPPOL_PS_CTX _ctx = this->getctx(event_id);
+	if (_ctx == NULL) {
+		this->addlog(epollogtype::eERROR, "%s(), event id %d ctx is NULL.", __func__, event_id);
+		return;
+	}
+	_ctx->m_rawread = read;
+	_ctx->m_rawwrite = write;
 }
 
 int clibpoll::createlistensocket(unsigned short int port)
@@ -391,7 +403,7 @@ sock_t clibpoll::createsocket(bool nonblocking)
 	return s;
 }
 
-bool clibpoll::sendbuffer(int event_id, unsigned char* lpMsg, unsigned int dwSize)
+bool clibpoll::sendbuffer(int event_id, unsigned char* lpMsg, size_t dwSize)
 {
 	std::lock_guard<std::recursive_mutex> lk(m);
 	LPPOL_PS_CTX lpPerSocketContext = this->getctx(event_id);
@@ -401,6 +413,10 @@ bool clibpoll::sendbuffer(int event_id, unsigned char* lpMsg, unsigned int dwSiz
 		return false;
 	}
 
+	if (lpPerSocketContext->m_rawwrite == true) {
+		this->addlog(epollogtype::eERROR, "%s(), event id %d write is set to raw.", __func__, event_id);
+		return false;
+	}
 
 	if (lpPerSocketContext->m_socket == INVALID_SOCKET) {
 		this->addlog(epollogtype::eERROR, "%s(), event id %d m_socket is INVALID_SOCKET.", __func__, event_id);
@@ -775,7 +791,6 @@ int clibpoll::handlereceive(LPPOL_PS_CTX ctx)
 	}
 
 	if (ctx->recvcb != NULL && !ctx->recvcb(this, eventid, ctx->arg)) { // receive callback
-		this->addlog(epollogtype::eERROR, "%s(), event id %d sock_t Header error %d", __func__, eventid, SOCKERR);
 		return 0;
 	}
 
@@ -788,41 +803,70 @@ int clibpoll::handlereceive(LPPOL_PS_CTX ctx)
 	return 1;
 }
 
+void clibpoll::reqwrite(int event_id)
+{
+	std::lock_guard<std::recursive_mutex> lk(m);
+	LPPOL_PS_CTX _ctx = this->getctx(event_id);
+	if (_ctx == NULL)
+		return;
+	if (_ctx->m_rawwrite == false)
+		return;
+	this->setepolevent(_ctx->m_socket, EPOLL_CTL_MOD, EPOLLIN | EPOLLOUT, _ctx);
+}
+
 bool clibpoll::handlesend(LPPOL_PS_CTX ctx)
 {
-
-	if (ctx->IOContext[1].nTotalBytes > 0) {
-		if (send(ctx->m_socket, ctx->IOContext[1].Buffer, ctx->IOContext[1].nTotalBytes, 0) == SOCKET_ERROR) {
-			this->addlog(epollogtype::eERROR, "%s, event id %d send error %d.", __func__, (int)ctx->m_eventid, SOCKERR);
-			return false;
+	if (ctx->m_rawwrite == true) {
+		if (ctx->sendcb != NULL) {
+			if (!ctx->sendcb(this, ctx->m_eventid, ctx->arg)) {
+				return false;
+			}
+			this->setepolevent(ctx->m_socket, EPOLL_CTL_MOD, EPOLLIN, ctx);
+			return true;
 		}
-		this->addlog(epollogtype::eTEST, "%s, event id %d sent %d bytes (1)", __func__, (int)ctx->m_eventid, ctx->IOContext[1].nTotalBytes);
-		ctx->IOContext[1].nTotalBytes = 0;
-		ctx->IOContext[1].pReallocCounts = 0;
-		ctx->IOContext[1].nWaitIO = 0;
-	}
-	else if (ctx->IOContext[1].nTotalBytes == 0) {
-		this->setepolevent(ctx->m_socket, EPOLL_CTL_MOD, EPOLLIN, ctx);
-		return true;
-	}
-
-	if (ctx->IOContext[1].nSecondOfs > 0) {
-		if (ctx->IOContext[1].nSecondOfs <= POL_MAX_IO_BUFFER_SIZE) {
-			memcpy(ctx->IOContext[1].Buffer, ctx->IOContext[1].pBuffer, ctx->IOContext[1].nSecondOfs);
-			ctx->IOContext[1].nTotalBytes = static_cast<int>(ctx->IOContext[1].nSecondOfs);
-			ctx->IOContext[1].nSecondOfs = 0;
-		}
-		else {
-			memcpy(ctx->IOContext[1].Buffer, ctx->IOContext[1].pBuffer, POL_MAX_IO_BUFFER_SIZE);
-			ctx->IOContext[1].nTotalBytes = POL_MAX_IO_BUFFER_SIZE;
-			ctx->IOContext[1].nSecondOfs -= POL_MAX_IO_BUFFER_SIZE;
-			memcpy(ctx->IOContext[1].pBuffer, &ctx->IOContext[1].pBuffer[POL_MAX_IO_BUFFER_SIZE], ctx->IOContext[1].nSecondOfs);
-		}
-		this->addlog(epollogtype::eTEST, "%s, event id %d copy %d bytes to buffer", __func__, (int)ctx->m_eventid, ctx->IOContext[1].nTotalBytes);
-		ctx->IOContext[1].nWaitIO = 1;
 	}
 	else {
-		this->setepolevent(ctx->m_socket, EPOLL_CTL_MOD, EPOLLIN, ctx);
+		if (ctx->IOContext[1].nTotalBytes > 0) {
+			if (send(ctx->m_socket, ctx->IOContext[1].Buffer, ctx->IOContext[1].nTotalBytes, 0) == SOCKET_ERROR) {
+				this->addlog(epollogtype::eERROR, "%s, event id %d send error %d.", __func__, (int)ctx->m_eventid, SOCKERR);
+				ctx->IOContext[1].nTotalBytes = 0;
+				if(ctx->sendcb != NULL)
+					ctx->sendcb(this, ctx->m_eventid, ctx->arg);
+				return false;
+			}
+
+			if (ctx->sendcb != NULL && !ctx->sendcb(this, ctx->m_eventid, ctx->arg)) {
+				return false;
+			}
+
+			this->addlog(epollogtype::eTEST, "%s, event id %d sent %d bytes (1)", __func__, (int)ctx->m_eventid, ctx->IOContext[1].nTotalBytes);
+			ctx->IOContext[1].nTotalBytes = 0;
+			ctx->IOContext[1].pReallocCounts = 0;
+			ctx->IOContext[1].nWaitIO = 0;
+		}
+		else if (ctx->IOContext[1].nTotalBytes == 0) {
+			this->setepolevent(ctx->m_socket, EPOLL_CTL_MOD, EPOLLIN, ctx);
+			return true;
+		}
+
+		if (ctx->IOContext[1].nSecondOfs > 0) {
+			if (ctx->IOContext[1].nSecondOfs <= POL_MAX_IO_BUFFER_SIZE) {
+				memcpy(ctx->IOContext[1].Buffer, ctx->IOContext[1].pBuffer, ctx->IOContext[1].nSecondOfs);
+				ctx->IOContext[1].nTotalBytes = static_cast<int>(ctx->IOContext[1].nSecondOfs);
+				ctx->IOContext[1].nSecondOfs = 0;
+			}
+			else {
+				memcpy(ctx->IOContext[1].Buffer, ctx->IOContext[1].pBuffer, POL_MAX_IO_BUFFER_SIZE);
+				ctx->IOContext[1].nTotalBytes = POL_MAX_IO_BUFFER_SIZE;
+				ctx->IOContext[1].nSecondOfs -= POL_MAX_IO_BUFFER_SIZE;
+				memcpy(ctx->IOContext[1].pBuffer, &ctx->IOContext[1].pBuffer[POL_MAX_IO_BUFFER_SIZE], ctx->IOContext[1].nSecondOfs);
+			}
+			this->addlog(epollogtype::eTEST, "%s, event id %d copy %d bytes to buffer", __func__, (int)ctx->m_eventid, ctx->IOContext[1].nTotalBytes);
+			ctx->IOContext[1].nWaitIO = 1;
+		}
+		else {
+			this->setepolevent(ctx->m_socket, EPOLL_CTL_MOD, EPOLLIN, ctx);
+		}
 	}
 	return true;
 }
@@ -836,6 +880,11 @@ size_t clibpoll::readbuffer(int event_id, char* buffer, size_t buffersize)
 
 	if (ctx == NULL) {
 		this->addlog(epollogtype::eERROR, "%s(), event id %d ctx is NULL.", __func__, event_id);
+		return 0;
+	}
+
+	if (ctx->m_rawwrite == true) {
+		this->addlog(epollogtype::eERROR, "%s(), event id %d read is set to raw.", __func__, event_id);
 		return 0;
 	}
 
@@ -960,6 +1009,14 @@ intptr_t clibpoll::getindex(int event_id) {
 	if (_ctx == NULL)
 		return -1;
 	return _ctx->m_index;
+}
+
+size_t clibpoll::getsentbytes(int event_id)
+{
+	LPPOL_PS_CTX _ctx = this->getctx(event_id);
+	if (_ctx == NULL)
+		return 0;
+	return _ctx->IOContext[1].nTotalBytes;
 }
 
 #ifndef _WIN32

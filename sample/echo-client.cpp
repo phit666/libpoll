@@ -7,6 +7,7 @@
 
 static bool acceptcb(polbase* base, int eventid, void* arg);
 static bool readcb(polbase* base, int eventid, void* arg);
+static bool writecb(polbase* base, int eventid, void* arg);
 static void logger(epollogtype type, const char* msg);
 static void signal_handler(int signal);
 polbase* gbase = NULL;
@@ -15,20 +16,20 @@ int main()
 {
     char sbuf[100] = { 0 };
 
-    polbase* base = polnewbase(logger, NULL);
+    polbase* base = polnewbase(logger);
     gbase = base;
 
-    for (int n = 0; n < 10; n++) {
+    for (int n = 0; n < 3; n++) {
 		sprintf_s(sbuf, 100, "Hello World!"); /**the initial data to send upon connection*/
 		int eventid = polconnect(base, "127.0.0.1", 3000, sbuf, strlen(sbuf)+1); /**set the initial buf size to 0 if there has no initial data to send*/
-        polsetcb(base, eventid, readcb, NULL, (void*)n);
+        polsetcb(base, eventid, readcb, writecb, NULL, (void*)n);
     }
 
     std::signal(SIGINT, signal_handler);
     std::cout << "press Ctrl-C to exit.\n";
 
     /*single threaded dispatching of events*/
-    poldispatch(base); 
+    poldispatch(base, 1000); 
 
     std::cout << "dispatchbreak called, cleaning the mess up...\n";
     polbasedelete(base);
@@ -43,6 +44,14 @@ static bool readcb(polbase* base, int eventid, void* arg)
 
     int readsize = polread(base, eventid, buff, sizeof(buff)); /**receive data, read it now...*/
     printf("<<< Server echo to index %d : %s\n", index, buff);
+    return true;
+}
+
+/**write callback, we can only get the size of data sent in this callback*/
+static bool writecb(polbase* base, int eventid, void* arg)
+{
+    int index = (int)arg;
+    printf(">>> index %d Sent %llu bytes\n", index, polgetsentbytes(base, eventid));
     return true;
 }
 

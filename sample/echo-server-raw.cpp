@@ -4,9 +4,30 @@
 #include <stdio.h>
 #include <csignal>
 #include <iostream>
+#include <map>
+
+#define BUFFER_SIZE 8192
+
+struct context {
+    context()
+    {
+        memset(buffer, 0, BUFFER_SIZE);
+        memset(ip, 0, sizeof(ip));
+        bufferlen = 0;
+        s = INVALID_SOCKET;
+    }
+    char buffer[BUFFER_SIZE];
+    int bufferlen;
+    char ip[16];
+    SOCKET s;
+};
+
+/*this will dynamically store our client context*/
+static std::map<int, context> mcontext;
 
 static bool acceptcb(polbase* base, int eventid, void* arg);
 static bool readcb(polbase* base, int eventid, void* arg);
+static bool writecb(polbase* base, int eventid, void* arg);
 static void eventcb(polbase* base, int eventid, epolstatus type, void* arg);
 static void logger(epollogtype type, const char* msg);
 static void signal_handler(int signal);
@@ -18,49 +39,68 @@ int main()
 {
     std::thread t[4];
 
-    polbase* base = polnewbase(logger, NULL);
+    polbase* base = polnewbase(logger);
     gbase = base;
     pollisten(base, 3000, acceptcb, NULL);
-
-    /*multi-threaded dispatching of events. 4 thread workers are set to poll for events.*/
-    for (int n = 0; n < 4; n++) {
-        t[n] = std::thread(poldispatch, base, 1, NULL);
-    }
 
     std::signal(SIGINT, signal_handler);
     std::cout << "press Ctrl-C to exit.\n";
 
-    for (int n = 0; n < 4; n++) {
-        t[n].join(); /*lets block here*/
-    }
+    poldispatch(base, 1000);
 
     std::cout << "dispatchbreak called, cleaning the mess up...\n";
     polbasedelete(base);
-
+    mcontext.clear();
     return 1;
 }
 
 /**accept callback, returing false in this callback will close the client*/
 static bool acceptcb(polbase* base, int eventid, void* arg)
 {
-    /**client connection accepted, we should store the pol eventid here to our variable..*/
+    /**store variables*/
+    context ctx;
+    polgetipaddr(base, eventid, ctx.ip);
+    ctx.s = polgetsocket(base, eventid);
+    mcontext.insert(std::pair<int, context>(eventid, ctx));
 
-    /**set read and event callback to newly accepted client*/
-    polsetcb(base, eventid, readcb, eventcb, NULL);
+    /**set read, write and event callback to newly accepted client*/
+    polsetcb(base, eventid, readcb, writecb, eventcb, NULL);
     
+    /*set both read and write raw*/
+    polsetraw(base, eventid, true, true);
+
     return true;
 }
 
 /**read callback, returing false in this callback will close the client*/
 static bool readcb(polbase* base, int eventid, void* arg)
 {
-    char buff[100] = { 0 };
+    /*this is a none blocking receive so no need to loop*/
+    int len = recv(mcontext[eventid].s, mcontext[eventid].buffer, BUFFER_SIZE, 0);
 
-    int readsize = polread(base, eventid, buff, sizeof(buff));
-    
-    printf(">>> Client message : %s\n", buff);
+    if (!len) {
+        return false;
+    }
 
-    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
+    mcontext[eventid].bufferlen += len;
+
+    printf(">>> Client message : %s\n", mcontext[eventid].buffer);
+
+    /*request write will trigger the write callback when write is set to raw*/
+    polreqwrite(base, eventid);
+
+    return true;
+}
+
+/**write callback, returing false in this callback will close the client*/
+static bool writecb(polbase* base, int eventid, void* arg)
+{
+    if (mcontext[eventid].bufferlen &&
+        send(mcontext[eventid].s, mcontext[eventid].buffer, mcontext[eventid].bufferlen, 0) == SOCKET_ERROR)
+        return false;
+
+    /*this is a none blocking send so sent bytes is equal to bufferlen*/
+    mcontext[eventid].bufferlen = 0;
 
     return true;
 }
@@ -71,14 +111,19 @@ static void eventcb(polbase* base, int eventid, epolstatus type, void* arg)
     char ipaddr[16] = { 0 };
     switch (type) {
     case epolstatus::eCONNECTED:
-        polgetipaddr(base, eventid, ipaddr);
         poladdlog(base, epollogtype::eINFO, "client connected, ip:%s socket:%d",
-            ipaddr, polgetsocket(base, eventid));
+            mcontext[eventid].ip, mcontext[eventid].s);
         break;
     case epolstatus::eCLOSED:
-        polgetipaddr(base, eventid, ipaddr);
         poladdlog(base, epollogtype::eINFO, "client disconnected, ip:%s socket:%d",
-            ipaddr, polgetsocket(base, eventid));
+            mcontext[eventid].ip, mcontext[eventid].s);
+
+        /*delete our client context when closed*/
+        std::map <int, context>::iterator iter;
+        iter = mcontext.find(eventid);
+        if (iter != mcontext.end())
+            mcontext.erase(iter);
+
         break;
     }
 }
