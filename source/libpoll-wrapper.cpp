@@ -1,3 +1,27 @@
+/*@file libpoll-wrapper.cpp
+ *
+ * MIT License
+ *
+ * Copyright (c) 2022 phit666
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 #include "includes/libpoll-wrapper.h"
 
 polbase* polnewbase(polloghandler loghandler, unsigned int logverboseflags, int connect2ndbuffer) {
@@ -36,9 +60,9 @@ void polsetreadeventcbargument(polbase* base, int event_id, void* arg) {
 	poll->setreadeventcbargument(event_id, arg);
 }
 
-void poldispatch(polbase* base, unsigned int timeout, unsigned int flags) {
+void poldispatch(polbase* base, unsigned int timeout, int maxevents, unsigned int flags) {
 	clibpoll* poll = (clibpoll*)base;
-	poll->dispatch(timeout, flags);
+	poll->dispatch(timeout, maxevents, flags);
 }
 
 int polconnect(polbase* base, const char* ipaddr, unsigned short int port, char* initbuf, int initlen, int flag, LPPOL_PS_CTX ctx) {
@@ -190,6 +214,11 @@ void polsetraw(polbase* base, int event_id, bool read, bool write){
 void polreqwrite(polbase* base, int event_id) {
 	clibpoll* poll = (clibpoll*)base;
 	poll->reqwrite(event_id);
+}
+
+int polgettcounts(polbase* base) {
+	clibpoll* poll = (clibpoll*)base;
+	return poll->gettcounts();
 }
 
 
