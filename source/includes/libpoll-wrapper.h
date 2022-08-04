@@ -120,7 +120,7 @@ bool polisconnected(polbase* base, int eventid);
 	@param flags				currently supported flag for now is DISPATCH_DONT_BLOCK, this flag will cause the dispatch to return immediately after fetching
 								socket events, setting this flag to default NULL will make poldispatch a blocking call looping for socket events.
 */
-void poldispatch(polbase* base, unsigned int timeout=INFINITE, unsigned int flags = 0);
+void poldispatch(polbase* base, unsigned int timeout=INFINITE, int maxevents=10, unsigned int flags = 0);
 
 /**
 	Set the read and event callback of pol object.
@@ -311,3 +311,5 @@ void polsetraw(polbase* base, int event_id, bool read, bool write);
 	@param event_id				pol event id.
 */
 void polreqwrite(polbase* base, int event_id);
+
+int polgettcounts(polbase* base);

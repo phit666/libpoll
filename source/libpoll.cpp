@@ -1,3 +1,27 @@
+/*@file libpoll.cpp
+ *
+ * MIT License
+ *
+ * Copyright (c) 2022 phit666
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 #ifdef _WIN32
 #include "third_party/wepoll.h"
 #endif
@@ -148,11 +172,15 @@ void clibpoll::init(polloghandler loghandler, unsigned int logverboseflags, size
 	}
 }
 
-void clibpoll::loop(uint32_t timeout, std::thread::id tid, epoll_event* events)
+void clibpoll::loop(uint32_t timeout, std::thread::id tid, epoll_event* events, int maxevents)
 {
 	std::lock_guard<std::recursive_mutex> _lk(_m);
 
-	int nfds = epoll_wait(this->m_epollfd, events, POL_MAX_EVENTS, timeout);
+	int _maxevents = maxevents;
+	if (_maxevents > POL_MAX_EVENTS)
+		_maxevents = POL_MAX_EVENTS;
+
+	int nfds = epoll_wait(this->m_epollfd, events, _maxevents, timeout);
 
 	std::lock_guard<std::recursive_mutex> lk(m);
 
@@ -228,16 +256,16 @@ void clibpoll::loop(uint32_t timeout, std::thread::id tid, epoll_event* events)
 	}
 }
 
-void clibpoll::dispatch(uint32_t timeout, unsigned int flags)
+void clibpoll::dispatch(uint32_t timeout, int maxevents, unsigned int flags)
 {
 	this->m_dispatchflags = flags;
 	epoll_event events[POL_MAX_EVENTS] = { 0 };
 	std::thread::id tid = std::this_thread::get_id();
-
+	this->m_tcount += 1;
 	this->addlog(epollogtype::eDEBUG, "%s, started with thread id: %u", __func__, tid);
 
 	while (true) {
-		this->loop(timeout, tid, events);
+		this->loop(timeout, tid, events, maxevents);
 		if (this->m_loopbreak || (flags & DISPATCH_DONT_BLOCK)) {
 			break;
 		}
@@ -340,7 +368,7 @@ void clibpoll::setraw(int event_id, bool read, bool write)
 int clibpoll::createlistensocket(unsigned short int port)
 {
 	sockaddr_in InternetAddr;
-	int nRet;
+	int nRet, on = 1;
 
 	if (port == 0) {
 		return 1;
@@ -360,6 +388,13 @@ int clibpoll::createlistensocket(unsigned short int port)
 		InternetAddr.sin_addr.s_addr = htonl(this->m_listenip);
 #endif
 		InternetAddr.sin_port = htons(port);
+
+		if (setsockopt(this->m_listensocket, SOL_SOCKET, SO_REUSEADDR,
+			(char*)&on, sizeof(on)) == SOCKET_ERROR) {
+			this->addlog(epollogtype::eERROR, "%s(), setsockopt() failed with error %d.", __func__, SOCKERR);
+			return 0;
+		}
+
 		nRet = ::bind(this->m_listensocket, (sockaddr*)&InternetAddr, 16);
 
 		if (nRet == SOCKET_ERROR)

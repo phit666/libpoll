@@ -7,7 +7,7 @@
 	@version libpoll 1.x.x
 */
 #define _LIBPOLL_MAJOR_VER_ 0x01
-#define _LIBPOLL_MINOR_VER_ 0x06
+#define _LIBPOLL_MINOR_VER_ 0x07
 #define _LIBPOLL_PATCH_VER_ 0x07
 
 /*
@@ -84,7 +84,7 @@ uint32_t GetTickCount();
 #endif
 
 #define POL_MAX_CONT_REALLOC_REQ		100			
-#define POL_MAX_EVENTS 10
+#define POL_MAX_EVENTS 1024
 
 #define DISPATCH_LOOP_ONCE 1
 #define DISPATCH_DONT_BLOCK 2
@@ -285,7 +285,7 @@ public:
 	void init(polloghandler loghandler=NULL, unsigned int logverboseflags = -1,
 		size_t initclt2ndbufsize = NULL, size_t initsvr2ndbufsize = NULL);
 
-	void dispatch(uint32_t timeout=INFINITE, unsigned int flags=0);
+	void dispatch(uint32_t timeout=INFINITE, int maxevents=10, unsigned int flags=0);
 	void dispatchbreak();
 
 	void listen(int listenport, polacceptcb acceptcb, void* arg, char* listenip=NULL);
@@ -324,11 +324,13 @@ public:
 
 	std::recursive_mutex m;
 
+	int gettcounts() { return this->m_tcount; }
+
 private:
 
 	std::recursive_mutex _m;
 
-	void loop(uint32_t timeout, std::thread::id tid, struct epoll_event * events);
+	void loop(uint32_t timeout, std::thread::id tid, struct epoll_event * events, int maxevents);
 	void setepolevent(sock_t s, uint32_t cmd, uint32_t flags, LPPOL_PS_CTX ctx);
 
 	intptr_t m_tindex;
@@ -375,6 +377,8 @@ private:
 	std::thread* m_t;
 	bool m_tstarted;
 	HANDLE m_epollfd;
+
+	int m_tcount;
 };
 
 
