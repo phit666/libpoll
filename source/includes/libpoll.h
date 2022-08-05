@@ -224,6 +224,9 @@ typedef struct _POL_PS_CTX
 		m_rawread = false;
 		m_rawwrite = false;
 		m_state = 0;
+		m_readywrite = 0;
+		m_readyread = 0;
+		m_edgetrigger = 0;
 	}
 
 	void clear2()
@@ -250,6 +253,9 @@ typedef struct _POL_PS_CTX
 		m_rawread = false;
 		m_rawwrite = false;
 		m_state = 0;
+		m_readywrite = 0;
+		m_readyread = 0;
+		m_edgetrigger = 0;
 	}
 
 
@@ -274,6 +280,9 @@ typedef struct _POL_PS_CTX
 	bool m_rawread;
 	bool m_rawwrite;
 	int m_state;
+	char m_readywrite;
+	char m_readyread;
+	char m_edgetrigger;
 } POL_PS_CTX, *LPPOL_PS_CTX;
 
 
@@ -347,6 +356,8 @@ private:
 	void closeeventid(int event_id, epolstatus flag = epolstatus::eCLOSED);
 	void clear();
 	void deleventid(int eventid);
+
+	bool _sendbuffer(LPPOL_PS_CTX ctx);
 
 	polacceptcb m_acceptcb;
 	void* m_acceptarg;

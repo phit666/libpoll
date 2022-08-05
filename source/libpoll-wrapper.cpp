@@ -73,7 +73,7 @@ int polconnect(polbase* base, const char* ipaddr, unsigned short int port, char*
 		poll->addlog(epollogtype::eWARNING, "%s(), makeconnect failed.", __func__);
 		return NULL;
 	}
-	if (initbuf == NULL) {
+	if (initbuf == NULL && initlen) {
 		poll->addlog(epollogtype::eWARNING, "%s(), initbuf is NULL.", __func__);
 		return NULL;
 	}

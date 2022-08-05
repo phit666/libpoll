@@ -123,6 +123,7 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event* event) {
     SOCK_NOTIFY_REGISTRATION registration = {};
     SOCKET s = epoll_fd2sock(fd);
     epoll_event* pevent = NULL;
+    intptr_t _fd = static_cast<intptr_t>(fd);
 
     if (s == INVALID_SOCKET)
         return -1;
@@ -134,25 +135,7 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event* event) {
 
         pevent = mevents[fd];
         pevent->events = 0;
-        registration.completionKey = pevent;
-        registration.operation = op;
-        registration.socket = s;
-
-        errorCode = ProcessSocketNotifications(mfd2hwnd[epfd], 1, &registration, 0, 0, NULL, NULL);
-
-        if (errorCode != ERROR_SUCCESS) {
-            printf("epoll_ctl EPOLL_CTL_DEL Error:%u\n", errorCode);
-            return -1;
-        }
-
-        if (registration.registrationResult != ERROR_SUCCESS) {
-            errorCode = registration.registrationResult;
-            printf("epoll_ctl EPOLL_CTL_DEL Error:%u\n", errorCode);
-            return -1;
-        }
-
-
-        return 0;
+        break;
 
     case EPOLL_CTL_MOD:
 
@@ -162,51 +145,16 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event* event) {
         if (event != NULL) {
             ::memcpy(pevent, event, sizeof(epoll_event));
         }
-
+        op = EPOLL_CTL_DEL;
         printf("debug: EPOLL_CTL_MOD, events:%u\n", pevent->events);
-
-        registration.completionKey = pevent;
-        registration.operation = EPOLL_CTL_DEL;
-        registration.socket = s;
-
-        errorCode = ProcessSocketNotifications(mfd2hwnd[epfd], 1, &registration, 0, 0, NULL, NULL);
-
-        if (errorCode != ERROR_SUCCESS) {
-            printf("epoll_ctl EPOLL_CTL_MOD Error:%u\n", errorCode);
-            return -1;
-        }
-
-        if (registration.registrationResult != ERROR_SUCCESS) {
-            errorCode = registration.registrationResult;
-            printf("epoll_ctl EPOLL_CTL_MOD Error:%u\n", errorCode);
-            return -1;
-        }
-
-        return 0;
+        break;
 
     case EPOLL_CTL_UPDATE:
 
         pevent = mevents[fd];
-
-        registration.completionKey = (PVOID)pevent;
-        registration.eventFilter = pevent->events | SOCK_NOTIFY_REGISTER_EVENT_HANGUP;
-        registration.operation = EPOLL_CTL_ADD;
-        registration.triggerFlags = SOCK_NOTIFY_TRIGGER_LEVEL | SOCK_NOTIFY_TRIGGER_PERSISTENT;
-        registration.socket = s;
-
-        errorCode = ProcessSocketNotifications(mfd2hwnd[epfd], 1, &registration, 0, 0, NULL, NULL);
-
-        if (errorCode != ERROR_SUCCESS) {
-            printf("epoll_ctl-1 EPOLL_CTL_UPDATE Error:%u\n", errorCode);
-            return -1;
-        }
-
-        if (registration.registrationResult != ERROR_SUCCESS) {
-            errorCode = registration.registrationResult;
-            printf("epoll_ctl-2 EPOLL_CTL_UPDATE Error:%u\n", errorCode);
-            return -1;
-        }
-        return 0;
+        op = EPOLL_CTL_ADD;
+        printf("debug: EPOLL_CTL_UPDATE, events:%u\n", pevent->events);
+        break;
 
     case EPOLL_CTL_ADD:
 
@@ -217,40 +165,60 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event* event) {
             ::memcpy(pevent, event, sizeof(epoll_event));
         }
         mevents.insert(std::pair<int, epoll_event*>(fd, pevent));
-
         printf("debug: EPOLL_CTL_ADD, events:%u\n", pevent->events);
-
-        registration.completionKey = (PVOID)pevent;
-        registration.eventFilter = pevent->events | SOCK_NOTIFY_REGISTER_EVENT_HANGUP;
-        registration.operation = op;
-        registration.triggerFlags = SOCK_NOTIFY_TRIGGER_LEVEL | SOCK_NOTIFY_TRIGGER_PERSISTENT;
-        registration.socket = s;
-
-        errorCode = ProcessSocketNotifications(mfd2hwnd[epfd], 1, &registration, 0, 0, NULL, NULL);
-
-        if (errorCode != ERROR_SUCCESS) {
-            printf("epoll_ctl-1 EPOLL_CTL_ADD Error:%u\n", errorCode);
-            return -1;
-        }
-
-        if (registration.registrationResult != ERROR_SUCCESS) {
-            errorCode = registration.registrationResult;
-            printf("epoll_ctl-2 EPOLL_CTL_ADD Error:%u\n", errorCode);
-            return -1;
-        }
-
-        return 0;
+        break;
     }
 
+    if (pevent == NULL)
+        return -1;
 
-    return -1;
+    registration.completionKey = (void*)_fd;
+
+    if (op != EPOLL_CTL_DEL) {
+        registration.triggerFlags = SOCK_NOTIFY_TRIGGER_PERSISTENT;
+        if (pevent->events & EPOLLET) {
+            registration.triggerFlags |= SOCK_NOTIFY_TRIGGER_EDGE;
+            pevent->events ^= EPOLLET;
+        }
+        else {
+            registration.triggerFlags |= SOCK_NOTIFY_TRIGGER_LEVEL;
+        }
+
+        if (pevent->events & EPOLLONESHOT) {
+            registration.triggerFlags |= SOCK_NOTIFY_TRIGGER_ONESHOT;
+            pevent->events ^= EPOLLONESHOT;
+        }
+        registration.eventFilter = pevent->events;
+    }
+
+    registration.operation = op;
+    registration.socket = s;
+
+    //printf("epoll_ctl Trigger:%d\n", registration.triggerFlags);
+
+    errorCode = ProcessSocketNotifications(mfd2hwnd[epfd], 1, &registration, 0, 0, NULL, NULL);
+
+    if (errorCode != ERROR_SUCCESS) {
+        printf("epoll_ctl-1 Operation:%d Error:%u\n", op, errorCode);
+        return -1;
+    }
+
+    if (registration.registrationResult != ERROR_SUCCESS) {
+        errorCode = registration.registrationResult;
+        printf("epoll_ctl-2 Operation:%d Error:%u\n", op, errorCode);
+        return -1;
+    }
+
+    return 0;
 }
 
 int epoll_wait(int epfd, struct epoll_event* events,
 	int maxevents, int timeout) {
 
     SOCKET s;
-    ULONG notificationCount;
+    intptr_t pfd;
+    int fd;
+    unsigned long notificationCount;
     UINT32 psnevents;
     OVERLAPPED_ENTRY* notification = NULL;
 
@@ -266,6 +234,8 @@ int epoll_wait(int epfd, struct epoll_event* events,
 
     if (notification == NULL)
         return -1;
+
+    //ProcessSocketNotifications(mfd2hwnd[epfd], 0, NULL, timeout, maxevents, notification, &notificationCount);
 
     if (!GetQueuedCompletionStatusEx(mfd2hwnd[epfd],
         notification,
@@ -283,14 +253,16 @@ int epoll_wait(int epfd, struct epoll_event* events,
     int i = 0;
 
     for (int n = 0; n < notificationCount; n++) {
+
         psnevents = SocketNotificationRetrieveEvents(&notification[n]);
-        epoll_event* _event = (epoll_event*)notification[n].lpCompletionKey;
-        if (_event == NULL)
-            continue;
+
+        pfd = (intptr_t)notification[n].lpCompletionKey;
+        fd = static_cast<int>(pfd);
+
+        printf("epoll_wait debug: fd:%d events %u\n", fd, psnevents);
+
+        epoll_event* pevent = mevents[fd];
         if (psnevents & SOCK_NOTIFY_EVENT_REMOVE) {
-            int fd = _event->data.fd;
-            epoll_event* pevent = mevents[fd];
-            //printf("epoll_wait debug: fd:%d events %d\n", fd, pevent->events);
             if(pevent->events == 0)
                 _delevent(fd);
             else {
@@ -299,7 +271,7 @@ int epoll_wait(int epfd, struct epoll_event* events,
             continue;
         }
         events[i].events = psnevents;
-        events[i++].data.fd = _event->data.fd;
+        events[i++].data.fd = fd;
     }
 
     free(notification);

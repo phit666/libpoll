@@ -32,21 +32,20 @@
 static bool acceptcb(polbase* base, int eventid, void* arg);
 static bool readcb(polbase* base, int eventid, void* arg);
 static bool writecb(polbase* base, int eventid, void* arg);
+static void eventcb(polbase* base, int eventid, epolstatus type, void* arg);
+
 static void logger(epollogtype type, const char* msg);
 static void signal_handler(int signal);
 polbase* gbase = NULL;
 
 int main()
 {
-    char sbuf[100] = { 0 };
-
-    polbase* base = polnewbase(logger);
+    polbase* base = polnewbase(logger, (unsigned int)epollogtype::eALL);
     gbase = base;
 
-    for (int n = 0; n < 3; n++) {
-		sprintf_s(sbuf, 100, "Hello World!"); /**the initial data to send upon connection*/
-		int eventid = polconnect(base, "127.0.0.1", 3000, sbuf, strlen(sbuf)+1); /**set the initial buf size to 0 if there has no initial data to send*/
-        polsetcb(base, eventid, readcb, writecb, NULL, (void*)n);
+    for (int n = 0; n < 1; n++) {
+		int eventid = polconnect(base, "127.0.0.1", 3000, NULL, 0); /**set the initial buf size to 0 if there has no initial data to send*/
+        polsetcb(base, eventid, readcb, writecb, eventcb, (void*)n);
     }
 
     std::signal(SIGINT, signal_handler);
@@ -60,7 +59,24 @@ int main()
     return 1;
 }
 
+/**event callback*/
+static void eventcb(polbase* base, int eventid, epolstatus type, void* arg)
+{
+    printf("eventcb, type: %d\n", (int)type);
+
+    char sbuf[100] = { 0 };
+    switch (type) {
+    case epolstatus::eCONNECTED:
+        sprintf_s(sbuf, 100, "Hello World!"); 
+        polwrite(base, eventid, (unsigned char*)sbuf, sizeof(sbuf)+1);
+        break;
+    case epolstatus::eCLOSED:
+        break;
+    }
+}
+
 /**read callback*/
+int ctr = 10000;
 static bool readcb(polbase* base, int eventid, void* arg)
 {
     char buff[100] = { 0 };
@@ -68,6 +84,12 @@ static bool readcb(polbase* base, int eventid, void* arg)
 
     int readsize = polread(base, eventid, buff, sizeof(buff)); /**receive data, read it now...*/
     printf("<<< Server echo to index %d : %s\n", index, buff);
+
+    if (ctr) {
+        //polwrite(base, eventid, (unsigned char*)buff, readsize);
+        ctr--;
+    }
+
     return true;
 }
 
