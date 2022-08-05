@@ -20,10 +20,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\sample\bench.cpp" />
+    <ClCompile Include="..\..\sample\third_party\psn.cpp" />
     <ClCompile Include="..\..\sample\third_party\select.cpp" />
     <ClCompile Include="..\..\sample\third_party\socketpair.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\sample\third_party\psn.h" />
     <ClInclude Include="..\..\sample\third_party\select.h" />
     <ClInclude Include="..\..\sample\third_party\socketpair.h" />
   </ItemGroup>

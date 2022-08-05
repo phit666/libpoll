@@ -27,7 +27,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <csignal>
-#include <iostream>
+#include <thread>
 
 static bool acceptcb(polbase* base, int eventid, void* arg);
 static bool readcb(polbase* base, int eventid, void* arg);
@@ -48,7 +48,7 @@ int main()
 
     /*multi-threaded dispatching of events. 4 thread workers are set to poll for events.*/
     for (int n = 0; n < 4; n++) {
-        t[n] = std::thread(poldispatch, base, 1, NULL);
+       t[n] = std::thread(poldispatch, base, 1000, 64, NULL);
     }
 
     std::signal(SIGINT, signal_handler);

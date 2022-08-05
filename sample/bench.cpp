@@ -26,6 +26,7 @@
 #include <libpoll-wrapper.h>
 #include "third_party/socketpair.h"
 #include "third_party/select.h"
+#include "third_party/psn.h"
 #include <csignal>
 #include <iostream>
 #include <stdlib.h>
@@ -33,6 +34,7 @@
 #include <chrono>
 #include <ctime>
 #include <cmath>
+
 
 static void runbench();
 static bool readcb(polbase* base, int eventid, void* arg);
@@ -64,7 +66,7 @@ int main(int argc, char* argv[])
     if (argc < 3) {
         std::cout << std::endl;
         std::cout << "Usage:" << std::endl;
-        std::cout << "bench.exe <connections> <writes> <methods: libpoll or select>" << std::endl;
+        std::cout << "bench.exe <connections> <writes> <methods: libpoll, select and psn>" << std::endl;
         std::cout << std::endl;
         system("pause");
         return -1;
@@ -74,8 +76,8 @@ int main(int argc, char* argv[])
     con = atoi(argv[1]);
     writes = atoi(argv[2]);
 
-    if (strcmp(method, "select") != 0 && strcmp(method, "libpoll") != 0) {
-        std::cout << "Invalid " << method << " entered, available methods are libpoll or select." << std::endl;
+    if (strcmp(method, "select") != 0 && strcmp(method, "libpoll") != 0 && strcmp(method, "psn") != 0) {
+        std::cout << "Invalid " << method << " entered, available methods are libpoll, select and psn." << std::endl;
         system("pause");
         return -1;
     }
@@ -88,6 +90,8 @@ int main(int argc, char* argv[])
 
     if (strcmp(method, "select") == 0)
         m = 1;
+    else if (strcmp(method, "psn") == 0)
+        m = 2;
 
     std::cout << "<<<" << method << " method benchmark >>>" << std::endl;
 
@@ -100,6 +104,11 @@ int main(int argc, char* argv[])
     if (m == 0) {
         base = polnewbase(logger, NULL);
         polenablecustomcontext(base);
+    }
+    else if (m == 2) {
+        if (!psninit()) {
+            printf("psninit failed, err:%d.\n", GetLastError());
+        }
     }
     else {
         initselect();
@@ -130,6 +139,12 @@ int main(int argc, char* argv[])
             polsetcustomarg(base, ctx->m_eventid, (void*)ctx);
             polsetcb(base, ctx->m_eventid, readcb, NULL, NULL, NULL);
         }
+        else if (m == 2) {
+            if (psnadd(s[0]) == 0){
+                printf("psnadd failed, connections:%d err:%d.\n", n + 1,  WSAGetLastError());
+                break;
+            }
+        }
         else {
             addfd(s[0]);
         }
@@ -159,6 +174,9 @@ int main(int argc, char* argv[])
 
     if(m == 0)
         polbasedelete(base);
+    if (m == 2) {
+        free(serverContext);
+    }
     ms.clear();
 #ifdef _WIN32
     WSACleanup();
@@ -171,6 +189,9 @@ static void runbench() {
 
     if (m == 0)
         poldispatch(base, 0, 10, DISPATCH_DONT_BLOCK);
+    else if (m == 2) {
+        psndispatch();
+    }
     else
         selectdispatch();
 
@@ -183,16 +204,20 @@ static void runbench() {
     startick = std::chrono::high_resolution_clock::now();
 
     for(; treads != twrites; ++dispatchcounts){
-        //printf("treads:%d twrites:%d sock:%d\n", (int)treads, (int)twrites, (int)ms[ncount].s2);
         if(m == 0)
             poldispatch(base, 0, 10, DISPATCH_DONT_BLOCK);
+        else if (m == 2) {
+            if (!psndispatch()) {
+                printf("psndispatch failed, error:%d\n", GetLastError());
+            }
+        }
         else {
             if (!selectdispatch())
                 break;
         }
     }
 
-    endtick = std::chrono::high_resolution_clock::now();// :system_clock::now();
+    endtick = std::chrono::high_resolution_clock::now();
 }
 
 static bool readcb(polbase* base, int eventid, void* arg) {
@@ -224,7 +249,7 @@ static bool readcb(polbase* base, int eventid, void* arg) {
     return true;
 }
 
-void selectread(sock_t s)
+void selectread(SOCKET s)
 {
     char rbuf[1];
 

@@ -376,7 +376,7 @@ private:
 	unsigned int m_dispatchflags;
 	std::thread* m_t;
 	bool m_tstarted;
-	HANDLE m_epollfd;
+	int m_epollfd;
 
 	int m_tcount;
 };

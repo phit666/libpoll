@@ -1,4 +1,4 @@
-/*@file select.h
+/*@file psn.h
  *
  * MIT License
  *
@@ -23,8 +23,13 @@
  * SOFTWARE.
  */
 
-void initselect();
-void addfd(SOCKET s);
-int selectdispatch();
-void selectread(SOCKET s);
+typedef struct SERVER_CONTEXT {
+    HANDLE ioCompletionPort;
+    SOCKET listenerSocket;
+} SERVER_CONTEXT;
 
+
+int psninit();
+int psnadd(SOCKET s);
+int psndispatch();
+extern SERVER_CONTEXT* serverContext;
