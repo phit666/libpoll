@@ -42,7 +42,7 @@ int main()
 {
     std::thread t[1];
 
-    polbase* base = polnewbase(logger, (DWORD)epollogtype::eDEBUG);
+    polbase* base = polnewbase(logger);
     gbase = base;
     pollisten(base, 3000, acceptcb, NULL);
 
@@ -86,7 +86,13 @@ static bool readcb(polbase* base, int eventid, void* arg)
 
     polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
     polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
-    //polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
+    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
+    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
+    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
+    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
+    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
+    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
+    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
 
     return true;
 }

@@ -24,9 +24,9 @@
  */
 #include "includes/libpoll-wrapper.h"
 
-polbase* polnewbase(polloghandler loghandler, unsigned int logverboseflags, int connect2ndbuffer) {
+polbase* polnewbase(polloghandler loghandler, unsigned int logverboseflags) {
 	clibpoll* muebase = new clibpoll;
-	muebase->init(loghandler, logverboseflags, 0, connect2ndbuffer);
+	muebase->init(loghandler, logverboseflags);
 	return (polbase*)muebase;
 }
 

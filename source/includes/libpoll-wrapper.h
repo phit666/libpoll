@@ -53,7 +53,7 @@ typedef struct _stpolConnectInfo {
 		@param connect2ndbuffer	This is a dynamic buffer storage that will expand as required by the data allocation size needed to be sent.
 		@return					pol base.
 */
-polbase* polnewbase(polloghandler loghandler = 0, unsigned int logverboseflags = (unsigned int)-1, int connect2ndbuffer = 0);
+polbase* polnewbase(polloghandler loghandler = 0, unsigned int logverboseflags = (unsigned int)-1);
 
 /**
 	Start accepting connections.

@@ -21,12 +21,14 @@
   <ItemGroup>
     <ClCompile Include="..\..\source\libpoll-wrapper.cpp" />
     <ClCompile Include="..\..\source\libpoll.cpp" />
+    <ClCompile Include="..\..\source\third_party\psn-epoll.cpp" />
     <ClCompile Include="..\..\source\third_party\wepoll.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\source\includes\libpoll-config.h" />
     <ClInclude Include="..\..\source\includes\libpoll-wrapper.h" />
     <ClInclude Include="..\..\source\includes\libpoll.h" />
+    <ClInclude Include="..\..\source\third_party\psn-epoll.h" />
     <ClInclude Include="..\..\source\third_party\wepoll.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -128,7 +130,7 @@
       <IntrinsicFunctions>false</IntrinsicFunctions>
       <SDLCheck>
       </SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions);_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions);_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS</PreprocessorDefinitions>
       <ConformanceMode>Default</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>

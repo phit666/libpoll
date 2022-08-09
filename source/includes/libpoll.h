@@ -158,6 +158,19 @@ typedef void (*poleventcb)(polbase* base, int event_id, epolstatus eventype, voi
 */
 typedef bool (*polacceptcb)(polbase* base, int event_id, void* argument);
 
+typedef struct _POL_BUFFER
+{
+	void clear()
+	{
+		memset(&buffer[0], 0, len);
+		drained = 0;
+		sent = 0;
+	}
+	char* buffer;
+	int len;
+	int drained;
+	int sent;
+} POL_BUFFER, * LP_POL_BUFFER;
 
 typedef struct _POL_PIO_CTX
 {
@@ -168,33 +181,18 @@ typedef struct _POL_PIO_CTX
 	void clear()
 	{
 		vBuffer.clear();
-		vLen.clear();
-		pBuffer = NULL;
-		pBufferLen = 0;
-		pReallocCounts = 0;
-		nSecondOfs = 0;
 		nTotalBytes = 0;
 		nSentBytes = 0;
-		nWaitIO = 0;
 	}
 	void clear2()
 	{
-		pReallocCounts = 0;
-		nSecondOfs = 0;
 		nTotalBytes = 0;
 		nSentBytes = 0;
-		nWaitIO = 0;
 	}
 	char Buffer[POL_MAX_IO_BUFFER_SIZE];
-	std::vector<unsigned char*> vBuffer;
-	std::vector<int> vLen;
-	char* pBuffer;
-	size_t pBufferLen;
-	int pReallocCounts;
-	size_t nSecondOfs;
+	std::vector<POL_BUFFER> vBuffer;
 	int nTotalBytes;
 	size_t nSentBytes;
-	int nWaitIO;
 } POL_PIO_CTX, * LPPOL_PIO_CTX;
 
 typedef struct _POL_PS_CTX
@@ -286,8 +284,7 @@ class clibpoll
 public:
 	clibpoll();
 	~clibpoll();
-	void init(polloghandler loghandler=NULL, unsigned int logverboseflags = -1,
-		size_t initclt2ndbufsize = NULL, size_t initsvr2ndbufsize = NULL);
+	void init(polloghandler loghandler=NULL, unsigned int logverboseflags = -1);
 
 	void dispatch(uint32_t timeout=INFINITE, int maxevents=10, unsigned int flags=0);
 	void dispatchbreak();
@@ -359,9 +356,6 @@ private:
 
 	LPPOL_PS_CTX m_acceptctx;
 	uint32_t m_accepteventid;
-
-	size_t m_initcltextbuffsize;
-	size_t m_initsvrextbuffsize;
 
 	std::map<int, LPPOL_PS_CTX>m_polmaps;
 	bool m_polmapsupdated;
