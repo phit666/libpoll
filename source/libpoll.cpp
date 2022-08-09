@@ -29,6 +29,7 @@
 #include "includes/libpoll-wrapper.h"
 #include <time.h>
 
+
 clibpoll::clibpoll()
 {
 	this->m_listensocket = INVALID_SOCKET;
@@ -43,9 +44,9 @@ clibpoll::clibpoll()
 	this->m_customctx = false;
 	this->m_loopbreak = false;
 	this->m_dispatchflags = 0;
-	this->m_t = nullptr;
 	this->m_tstarted = false;
 	this->m_polmapsupdated = false;
+	this->m_tcount = 0;
 
 	this->m_initcltextbuffsize = POL_MAX_IO_BUFFER_SIZE;
 	this->m_initsvrextbuffsize = POL_MAX_IO_BUFFER_SIZE;
@@ -106,6 +107,8 @@ void clibpoll::deletectx(LPPOL_PS_CTX ctx)
 		::free(ctx->IOContext[1].pBuffer);
 		ctx->IOContext[1].pBuffer = NULL;
 	}
+	ctx->IOContext[1].vBuffer.clear();
+	ctx->IOContext[1].vLen.clear();
 	delete ctx;
 }
 
@@ -140,6 +143,7 @@ void clibpoll::init(polloghandler loghandler, unsigned int logverboseflags, size
 	WORD wVersionRequested;
 	WSADATA wsaData;
 	int err;
+	int enableopt = 1;
 	wVersionRequested = MAKEWORD(2, 2);
 #endif
 	this->m_initcltextbuffsize = (initclt2ndbufsize != NULL) ? initclt2ndbufsize : this->m_initcltextbuffsize;
@@ -165,11 +169,18 @@ void clibpoll::init(polloghandler loghandler, unsigned int logverboseflags, size
 #endif
 	this->m_listensocket = createsocket(true);
 
+	if (setsockopt(this->m_listensocket, SOL_SOCKET, SO_KEEPALIVE, (const char*)&enableopt, sizeof(enableopt)) < 0) {
+		this->addlog(epollogtype::eERROR, "%s(), setsockopt failed.", __func__);
+		return;
+	}
+
 	this->m_epollfd = epoll_create1(0);
+
 	if (this->m_epollfd == NULL) {
 		this->addlog(epollogtype::eERROR, "%s(), epoll_create1 failed.", __func__);
 		return;
 	}
+
 }
 
 void clibpoll::loop(uint32_t timeout, std::thread::id tid, epoll_event* events, int maxevents)
@@ -458,6 +469,13 @@ bool clibpoll::sendbuffer(int event_id, unsigned char* lpMsg, size_t dwSize)
 		return false;
 	}
 
+	if (dwSize > POL_MAX_IO_BUFFER_SIZE)
+	{
+		this->addlog(epollogtype::eERROR, "%s(), event id %d send %d > max buffer %d.", __func__, event_id, dwSize, POL_MAX_IO_BUFFER_SIZE);
+		this->closeeventid(event_id);
+		return false;
+	}
+
 	LPPOL_PIO_CTX	lpIoCtxt = (LPPOL_PIO_CTX)&lpPerSocketContext->IOContext[1];
 
 	if (lpIoCtxt->pBuffer == NULL) {
@@ -467,89 +485,16 @@ bool clibpoll::sendbuffer(int event_id, unsigned char* lpMsg, size_t dwSize)
 
 	if (lpIoCtxt->nWaitIO > 0)
 	{
-		if ((lpIoCtxt->nSecondOfs + dwSize) > lpIoCtxt->pBufferLen)
-		{
-			if (lpIoCtxt->pReallocCounts >= POL_MAX_CONT_REALLOC_REQ) {
-				this->addlog(epollogtype::eERROR, "%s(), event id %d pReallocCounts (1) is max out, 0x%x", __func__, event_id, POL_MAX_CONT_REALLOC_REQ);
-				::free(lpIoCtxt->pBuffer);
-				lpIoCtxt->pBufferLen = POL_MAX_IO_BUFFER_SIZE;
-				lpIoCtxt->pBuffer = (char*)calloc(lpIoCtxt->pBufferLen, sizeof(char));
-				lpIoCtxt->pReallocCounts = 0;
-				this->closeeventid(event_id);
-				return false;
-			}
-
-			while (true) {
-				lpIoCtxt->pBufferLen *= 2;
-				if (lpIoCtxt->pBufferLen > (lpIoCtxt->nSecondOfs + dwSize))
-					break;
-			}
-
-			char* tmpBuffer = (char*)realloc(lpIoCtxt->pBuffer, lpIoCtxt->pBufferLen);
-
-			if (tmpBuffer == NULL) {
-				this->addlog(epollogtype::eERROR, "%s(), event id %d realloc (1) failed, requested size is %d.", __func__, event_id, lpIoCtxt->pBufferLen);
-				this->closeeventid(event_id);
-				return false;
-			}
-
-			lpIoCtxt->pBuffer = tmpBuffer;
-			lpIoCtxt->pReallocCounts++;
-
-			this->addlog(epollogtype::eDEBUG, "%s(), event id %d realloc (1) succeeded, requested size is %d.", __func__, event_id, lpIoCtxt->pBufferLen);
-		}
-
-		this->addlog(epollogtype::eTEST, "%s(), event id %d copied %d bytes to pBuffer, pbuffer size now is %d.", __func__,
-			event_id, dwSize, lpIoCtxt->nSecondOfs + dwSize);
-
-		memcpy(&lpIoCtxt->pBuffer[lpIoCtxt->nSecondOfs], lpMsg, dwSize);
+		lpIoCtxt->vBuffer.push_back(lpMsg);
+		lpIoCtxt->vLen.push_back(dwSize);
 		lpIoCtxt->nSecondOfs += dwSize;
-
+		//this->addlog(epollogtype::eDEBUG, "%s, event id %d push_back %d bytes (%s)", __func__, event_id, lpIoCtxt->vLen[0], (char*)lpIoCtxt->vBuffer[0]);
 		this->setepolevent(lpPerSocketContext->m_socket, EPOLL_CTL_MOD, EPOLLIN | EPOLLOUT, lpPerSocketContext);
 		return true;
 	}
 
-	lpIoCtxt->nTotalBytes = 0;
-
-	if ((lpIoCtxt->nTotalBytes + dwSize) > POL_MAX_IO_BUFFER_SIZE)
-	{
-		int bufflen = (lpIoCtxt->nTotalBytes + dwSize) - POL_MAX_IO_BUFFER_SIZE; // 808
-		int difflen = POL_MAX_IO_BUFFER_SIZE - lpIoCtxt->nTotalBytes; // 192
-
-		if ((lpIoCtxt->nSecondOfs + bufflen) > lpIoCtxt->pBufferLen) {
-
-			while (true) {
-				lpIoCtxt->pBufferLen *= 2;
-				if (lpIoCtxt->pBufferLen > (lpIoCtxt->nSecondOfs + dwSize))
-					break;
-			}
-
-			char* tmpBuffer = (char*)realloc(lpIoCtxt->pBuffer, lpIoCtxt->pBufferLen);
-
-			if (tmpBuffer == NULL) {
-				this->addlog(epollogtype::eERROR, "%s(), event id %d realloc (2) failed, requested size is %d.", __func__, event_id, lpIoCtxt->pBufferLen);
-				this->closeeventid(event_id);
-				return false;
-			}
-
-			lpIoCtxt->pBuffer = tmpBuffer;
-			lpIoCtxt->pReallocCounts++;
-
-			this->addlog(epollogtype::eDEBUG, "%s(), event id %d realloc (2) succeeded, requested size is %d.", __func__, event_id, lpIoCtxt->pBufferLen);
-		}
-
-		memcpy(&lpIoCtxt->pBuffer[lpIoCtxt->nSecondOfs], &lpMsg[difflen], bufflen);
-		lpIoCtxt->nSecondOfs += bufflen;
-
-		if (difflen > 0) {
-			memcpy(&lpIoCtxt->Buffer[lpIoCtxt->nTotalBytes], lpMsg, difflen);
-			lpIoCtxt->nTotalBytes += difflen;
-		}
-	}
-	else {
-		memcpy(&lpIoCtxt->Buffer[lpIoCtxt->nTotalBytes], lpMsg, dwSize);
-		lpIoCtxt->nTotalBytes += dwSize;
-	}
+	memcpy(&lpIoCtxt->Buffer, lpMsg, dwSize);
+	lpIoCtxt->nTotalBytes = dwSize;
 
 	this->setepolevent(lpPerSocketContext->m_socket, EPOLL_CTL_MOD, EPOLLIN | EPOLLOUT, lpPerSocketContext);
 	lpIoCtxt->nWaitIO = 1;
@@ -862,6 +807,7 @@ bool clibpoll::handlesend(LPPOL_PS_CTX ctx)
 	}
 	else {
 		if (ctx->IOContext[1].nTotalBytes > 0) {
+
 			if (send(ctx->m_socket, ctx->IOContext[1].Buffer, ctx->IOContext[1].nTotalBytes, 0) == SOCKET_ERROR) {
 				this->addlog(epollogtype::eERROR, "%s, event id %d send error %d.", __func__, (int)ctx->m_eventid, SOCKERR);
 				ctx->IOContext[1].nTotalBytes = 0;
@@ -885,18 +831,22 @@ bool clibpoll::handlesend(LPPOL_PS_CTX ctx)
 		}
 
 		if (ctx->IOContext[1].nSecondOfs > 0) {
-			if (ctx->IOContext[1].nSecondOfs <= POL_MAX_IO_BUFFER_SIZE) {
-				memcpy(ctx->IOContext[1].Buffer, ctx->IOContext[1].pBuffer, ctx->IOContext[1].nSecondOfs);
-				ctx->IOContext[1].nTotalBytes = static_cast<int>(ctx->IOContext[1].nSecondOfs);
-				ctx->IOContext[1].nSecondOfs = 0;
-			}
-			else {
-				memcpy(ctx->IOContext[1].Buffer, ctx->IOContext[1].pBuffer, POL_MAX_IO_BUFFER_SIZE);
-				ctx->IOContext[1].nTotalBytes = POL_MAX_IO_BUFFER_SIZE;
-				ctx->IOContext[1].nSecondOfs -= POL_MAX_IO_BUFFER_SIZE;
-				memcpy(ctx->IOContext[1].pBuffer, &ctx->IOContext[1].pBuffer[POL_MAX_IO_BUFFER_SIZE], ctx->IOContext[1].nSecondOfs);
-			}
-			this->addlog(epollogtype::eTEST, "%s, event id %d copy %d bytes to buffer", __func__, (int)ctx->m_eventid, ctx->IOContext[1].nTotalBytes);
+
+			std::vector<unsigned char*>::iterator iter1;
+			std::vector<int>::iterator iter2;
+			iter1 = ctx->IOContext[1].vBuffer.begin();
+			iter2 = ctx->IOContext[1].vLen.begin();
+
+			memcpy(ctx->IOContext[1].Buffer, (char*)*iter1, *iter2);
+
+			ctx->IOContext[1].nSecondOfs -= *iter2;
+			ctx->IOContext[1].nTotalBytes = *iter2;
+
+			this->addlog(epollogtype::eDEBUG, "%s, event id %d copy %d bytes (%s) to buffer", __func__, (int)ctx->m_eventid, ctx->IOContext[1].nTotalBytes, (char*)ctx->IOContext[1].vBuffer[0]);
+
+			//ctx->IOContext[1].vBuffer.erase(iter1);
+			//ctx->IOContext[1].vLen.erase(iter2);
+
 			ctx->IOContext[1].nWaitIO = 1;
 		}
 		else {

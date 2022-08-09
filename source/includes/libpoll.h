@@ -84,7 +84,7 @@ uint32_t GetTickCount();
 #endif
 
 #define POL_MAX_CONT_REALLOC_REQ		100			
-#define POL_MAX_EVENTS 1024
+#define POL_MAX_EVENTS 64
 
 #define DISPATCH_LOOP_ONCE 1
 #define DISPATCH_DONT_BLOCK 2
@@ -167,6 +167,8 @@ typedef struct _POL_PIO_CTX
 	}
 	void clear()
 	{
+		vBuffer.clear();
+		vLen.clear();
 		pBuffer = NULL;
 		pBufferLen = 0;
 		pReallocCounts = 0;
@@ -184,6 +186,8 @@ typedef struct _POL_PIO_CTX
 		nWaitIO = 0;
 	}
 	char Buffer[POL_MAX_IO_BUFFER_SIZE];
+	std::vector<unsigned char*> vBuffer;
+	std::vector<int> vLen;
 	char* pBuffer;
 	size_t pBufferLen;
 	int pReallocCounts;
@@ -374,7 +378,6 @@ private:
 	bool m_loopbreak;
 
 	unsigned int m_dispatchflags;
-	std::thread* m_t;
 	bool m_tstarted;
 	HANDLE m_epollfd;
 

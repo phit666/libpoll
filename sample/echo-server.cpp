@@ -40,21 +40,21 @@ polbase* gbase = NULL;
 
 int main()
 {
-    std::thread t[4];
+    std::thread t[1];
 
-    polbase* base = polnewbase(logger);
+    polbase* base = polnewbase(logger, (DWORD)epollogtype::eDEBUG);
     gbase = base;
     pollisten(base, 3000, acceptcb, NULL);
 
     /*multi-threaded dispatching of events. 4 thread workers are set to poll for events.*/
-    for (int n = 0; n < 4; n++) {
-        t[n] = std::thread(poldispatch, base, 1, NULL);
+    for (int n = 0; n < 1; n++) {
+        t[n] = std::thread(poldispatch, base, 1000, 10, NULL);
     }
 
     std::signal(SIGINT, signal_handler);
     std::cout << "press Ctrl-C to exit.\n";
 
-    for (int n = 0; n < 4; n++) {
+    for (int n = 0; n < 1; n++) {
         t[n].join(); /*lets block here*/
     }
 
@@ -85,6 +85,8 @@ static bool readcb(polbase* base, int eventid, void* arg)
     printf(">>> Client message : %s\n", buff);
 
     polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
+    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
+    //polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
 
     return true;
 }
