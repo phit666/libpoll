@@ -7,7 +7,7 @@
 	@version libpoll 1.x.x
 */
 #define _LIBPOLL_MAJOR_VER_ 0x01
-#define _LIBPOLL_MINOR_VER_ 0x07
+#define _LIBPOLL_MINOR_VER_ 0x08
 #define _LIBPOLL_PATCH_VER_ 0x07
 
 /*
@@ -141,22 +141,22 @@ typedef void (*polloghandler)(epollogtype logtype, const char* message);
 /**
 	Read callback typedef.
 */
-typedef bool (*polreadcb)(polbase* base, int event_id, void* argument);
+typedef bool (*polreadcb)(int event_id, void* argument);
 
 /**
 	Write callback typedef.
 */
-typedef bool (*polwritecb)(polbase* base, int event_id, void* argument);
+typedef bool (*polwritecb)(int event_id, void* argument);
 
 /**
 	Event callback typedef.
 */
-typedef void (*poleventcb)(polbase* base, int event_id, epolstatus eventype, void* argument);
+typedef void (*poleventcb)(int event_id, epolstatus eventype, void* argument);
 
 /**
 	Accept callback typedef.
 */
-typedef bool (*polacceptcb)(polbase* base, int event_id, void* argument);
+typedef bool (*polacceptcb)(int event_id, void* argument);
 
 typedef struct _POL_BUFFER
 {
@@ -286,6 +286,9 @@ public:
 	~clibpoll();
 	void init(polloghandler loghandler=NULL, unsigned int logverboseflags = -1);
 
+	void dispatch_thread_run();
+	void dispatch_threads(int threadcounts, uint32_t timeout = INFINITE, int maxevents = 10, unsigned int flags = 0);
+
 	void dispatch(uint32_t timeout=INFINITE, int maxevents=10, unsigned int flags=0);
 	void dispatchbreak();
 
@@ -331,7 +334,7 @@ private:
 
 	std::recursive_mutex _m;
 
-	void loop(uint32_t timeout, std::thread::id tid, struct epoll_event * events, int maxevents);
+	int loop(uint32_t timeout, std::thread::id tid, struct epoll_event * events, int maxevents);
 	void setepolevent(sock_t s, uint32_t cmd, uint32_t flags, LPPOL_PS_CTX ctx);
 
 	intptr_t m_tindex;
@@ -373,9 +376,14 @@ private:
 
 	unsigned int m_dispatchflags;
 	bool m_tstarted;
+
 	HANDLE m_epollfd;
 
 	int m_tcount;
+	uint32_t m_ttimeout;
+	int m_tmaxevents;
+	unsigned int m_tflags;
+	std::thread* m_t;
 };
 
 
