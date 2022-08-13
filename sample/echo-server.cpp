@@ -22,95 +22,80 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#include <libpoll-wrapper.h>
+#include <libpoll.h>
 #include <iostream>
 #include <stdlib.h>
 #include <stdio.h>
 #include <csignal>
 #include <iostream>
 
-static bool acceptcb(polbase* base, int eventid, void* arg);
-static bool readcb(polbase* base, int eventid, void* arg);
-static void eventcb(polbase* base, int eventid, epolstatus type, void* arg);
+static bool acceptcb(int eventid, void* arg);
+static bool readcb(int eventid, void* arg);
+static void eventcb(int eventid, epolstatus type, void* arg);
 static void logger(epollogtype type, const char* msg);
-static void signal_handler(int signal);
 
 int indexctr = 0;
-polbase* gbase = NULL;
+clibpoll* libpoll = NULL;
 
 int main()
 {
     std::thread t[1];
 
-    polbase* base = polnewbase(logger);
-    gbase = base;
-    pollisten(base, 3000, acceptcb, NULL);
+    libpoll = new clibpoll;
+    libpoll->init(logger);
+    libpoll->listen(3000, acceptcb, NULL);
+    libpoll->dispatch_threads(4, INFINITE, 1);
 
-    /*multi-threaded dispatching of events. 4 thread workers are set to poll for events.*/
-    for (int n = 0; n < 1; n++) {
-        t[n] = std::thread(poldispatch, base, 1000, 10, NULL);
-    }
+    std::cout << "press any key to exit.\n";
 
-    std::signal(SIGINT, signal_handler);
-    std::cout << "press Ctrl-C to exit.\n";
-
-    for (int n = 0; n < 1; n++) {
-        t[n].join(); /*lets block here*/
-    }
+    int ret = getchar();
 
     std::cout << "dispatchbreak called, cleaning the mess up...\n";
-    polbasedelete(base);
+    libpoll->dispatchbreak();
+    delete libpoll;
 
     return 1;
 }
 
 /**accept callback, returing false in this callback will close the client*/
-static bool acceptcb(polbase* base, int eventid, void* arg)
+static bool acceptcb(int eventid, void* arg)
 {
     /**client connection accepted, we should store the pol eventid here to our variable..*/
 
     /**set read and event callback to newly accepted client*/
-    polsetcb(base, eventid, readcb, NULL, eventcb, NULL);
+    libpoll->setconnectcb(eventid, readcb, NULL, eventcb, NULL);
     
     return true;
 }
 
 /**read callback, returing false in this callback will close the client*/
-static bool readcb(polbase* base, int eventid, void* arg)
+static bool readcb(int eventid, void* arg)
 {
     char buff[100] = { 0 };
 
-    size_t readsize = polread(base, eventid, buff, sizeof(buff));
+    size_t readsize = libpoll->readbuffer(eventid, buff, sizeof(buff));
     
     printf(">>> Client message : %s\n", buff);
 
-    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
-    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
-    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
-    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
-    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
-    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
-    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
-    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
-    polwrite(base, eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
+    libpoll->sendbuffer(eventid, (unsigned char*)buff, readsize); /**echo the received data from client*/
 
     return true;
 }
 
 /**event callback*/
-static void eventcb(polbase* base, int eventid, epolstatus type, void* arg)
+static void eventcb(int eventid, epolstatus type, void* arg)
 {
     char ipaddr[16] = { 0 };
     switch (type) {
     case epolstatus::eCONNECTED:
-        polgetipaddr(base, eventid, ipaddr);
-        poladdlog(base, epollogtype::eINFO, "client connected, ip:%s socket:%d",
-            ipaddr, polgetsocket(base, eventid));
+        libpoll->getipaddr(eventid, ipaddr);
+        libpoll->addlog(epollogtype::eINFO, "client connected, ip:%s socket:%d",
+            ipaddr, libpoll->getsocket(eventid));
         break;
     case epolstatus::eCLOSED:
-        polgetipaddr(base, eventid, ipaddr);
-        poladdlog(base, epollogtype::eINFO, "client disconnected, ip:%s socket:%d",
-            ipaddr, polgetsocket(base, eventid));
+        libpoll->getipaddr(eventid, ipaddr);
+        libpoll->addlog(epollogtype::eINFO, "client disconnected, ip:%s socket:%d",
+            ipaddr, libpoll->getsocket(eventid));
         break;
     }
 }
@@ -137,7 +122,3 @@ static void logger(epollogtype type, const char* msg)
     }
 }
 
-static void signal_handler(int signal)
-{
-    poldispatchbreak(gbase); /**we will return dispatch upon Ctrl-C*/
-}
