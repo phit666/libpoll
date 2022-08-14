@@ -26,7 +26,6 @@
 #include "third_party/wepoll.h"
 #endif
 #include "includes/libpoll.h"
-#include "includes/libpoll-wrapper.h"
 #include <time.h>
 
 
@@ -41,7 +40,6 @@ clibpoll::clibpoll()
 	this->m_eventid = 0;
 	this->m_activeworkers = 0;
 	this->m_listenip = 0;
-	this->m_customctx = false;
 	this->m_loopbreak = false;
 	this->m_dispatchflags = 0;
 	this->m_tstarted = false;
@@ -68,18 +66,16 @@ void clibpoll::clear()
 {
 	LPPOL_PS_CTX _ctx = NULL;
 	std::map <int, LPPOL_PS_CTX>::iterator iterq;
-	if (this->m_customctx == false) {
-		for (iterq = this->m_polmaps.begin(); iterq != this->m_polmaps.end(); iterq++)
-		{
-			_ctx = iterq->second;
-			if (_ctx != NULL) {
-				this->addlog(epollogtype::eINFO, "%s(), closing event id %d.", __func__, _ctx->m_eventid);
-				if (_ctx->m_socket != INVALID_SOCKET) {
-					this->setepolevent(_ctx->m_socket, EPOLL_CTL_DEL, 0, _ctx);
-					closesocket(_ctx->m_socket);
-				}
-				this->deletectx(_ctx);
+	for (iterq = this->m_polmaps.begin(); iterq != this->m_polmaps.end(); iterq++)
+	{
+		_ctx = iterq->second;
+		if (_ctx != NULL) {
+			this->addlog(epollogtype::eINFO, "%s(), closing event id %d.", __func__, _ctx->m_eventid);
+			if (_ctx->m_socket != INVALID_SOCKET) {
+				this->setepolevent(_ctx, EPOLL_CTL_DEL, 0);
+				closesocket(_ctx->m_socket);
 			}
+			this->deletectx(_ctx);
 		}
 	}
 	this->m_polmaps.clear();
@@ -185,7 +181,9 @@ int clibpoll::loop(uint32_t timeout, std::thread::id tid, epoll_event* events, i
 	if (_maxevents > POL_MAX_EVENTS)
 		_maxevents = POL_MAX_EVENTS;
 
-	std::lock_guard<std::recursive_mutex> _lk(_m);
+	if (this->m_tcount > 1) {
+		std::lock_guard<std::recursive_mutex> _lk(_m);
+	}
 
 	int nfds = epoll_wait(this->m_epollfd, events, _maxevents, timeout);
 
@@ -207,7 +205,7 @@ int clibpoll::loop(uint32_t timeout, std::thread::id tid, epoll_event* events, i
 			LPPOL_PS_CTX ctx = this->getctx((int)s);
 
 			if (ctx == NULL) {
-				this->addlog(epollogtype::eDEBUG, "%s, event id %d ctx is NULL.", __func__, (int)s);
+				//this->addlog(epollogtype::eDEBUG, "%s, event id %d ctx is NULL.", __func__, (int)s);
 				continue;
 			}
 
@@ -271,10 +269,7 @@ void clibpoll::dispatch(uint32_t timeout, int maxevents, unsigned int flags)
 	this->addlog(epollogtype::eINFO, "%s, started with thread id: %u", __func__, tid);
 
 	while (true) {
-		if (this->loop(timeout, tid, events, maxevents) == -1) {
-			this->addlog(epollogtype::eERROR, "%s, loop failed, thread id: %u errno: %d", __func__, tid, errno);
-			break;
-		}
+		this->loop(timeout, tid, events, maxevents);
 		if (this->m_loopbreak || (flags & DISPATCH_DONT_BLOCK)) {
 			break;
 		}
@@ -297,6 +292,7 @@ void clibpoll::dispatch_thread_run()
 			break;
 		}
 		if (this->m_loopbreak || (this->m_tflags & DISPATCH_DONT_BLOCK)) {
+			this->addlog(epollogtype::eINFO, "%s, loop break, thread id: %u", __func__, tid);
 			break;
 		}
 	}
@@ -314,6 +310,7 @@ void clibpoll::dispatch_threads(int threadcounts, uint32_t timeout, int maxevent
 
 	for (int n = 0; n < threadcounts; n++) {
 		this->m_t[n] = std::thread([this]() { dispatch_thread_run(); });
+		this->m_t[n].detach();
 	}
 }
 
@@ -321,11 +318,8 @@ void clibpoll::dispatch_threads(int threadcounts, uint32_t timeout, int maxevent
 void clibpoll::dispatchbreak()
 {
 	this->m_loopbreak = true;
-	if (this->m_tcount > 0) {
-		for (int n = 0; n < this->m_tcount; n++) {
-			this->m_t[n].join();
-		}
-		delete[] this->m_t;
+	if (this->m_listensocket != INVALID_SOCKET) {
+		closesocket(this->m_listensocket);
 	}
 }
 
@@ -371,15 +365,16 @@ void clibpoll::listen(int listenport, polacceptcb acceptcb, void* arg, char* lis
 
 	std::lock_guard<std::recursive_mutex> lk(m);
 	this->m_polmaps.insert(std::pair<int, LPPOL_PS_CTX>(this->m_accepteventid, this->m_acceptctx));
-	this->setepolevent(this->m_listensocket, EPOLL_CTL_ADD, EPOLLRDNORM, this->m_acceptctx);
+	this->setepolevent(this->m_acceptctx, EPOLL_CTL_ADD, EPOLLRDNORM | EPOLLHUP);
 	this->addlog(epollogtype::eINFO, "%s() ok, listen port is %d.", __func__, this->m_listenport);
 }
 
-void clibpoll::setepolevent(sock_t s, uint32_t cmd, uint32_t flags, LPPOL_PS_CTX ctx)
+void clibpoll::setepolevent(LPPOL_PS_CTX ctx, uint32_t cmd, uint32_t flags)
 {
 	epoll_event pollfd;
 	std::lock_guard<std::recursive_mutex> lk(m);
-	if (s == INVALID_SOCKET || this->getctx((int)s) == NULL)
+	sock_t s = ctx->m_socket;
+	if (s == INVALID_SOCKET || ctx->m_events == flags)
 		return;
 	this->addlog(epollogtype::eDEBUG, "%s(), socket:%d cmd:%d flag:%d.", __func__, (int)s, (int)cmd, (int)flags);
 	pollfd.events = flags;
@@ -387,6 +382,7 @@ void clibpoll::setepolevent(sock_t s, uint32_t cmd, uint32_t flags, LPPOL_PS_CTX
 	if (epoll_ctl(this->m_epollfd, cmd, s, &pollfd) == -1) {
 		this->addlog(epollogtype::eINFO, "%s(), failed with socket:%d errno %d.", __func__, (int)s, errno);
 	}
+	ctx->m_events = flags;
 }
 
 void clibpoll::setconnectcb(int event_id, polreadcb readcb, polreadcb writecb, poleventcb eventcb, void* arg)
@@ -515,7 +511,7 @@ bool clibpoll::sendbuffer(int event_id, unsigned char* lpMsg, size_t dwSize)
 
 	this->addlog(epollogtype::eDEBUG, "%s(), event id %d add %d bytes to buffer.", __func__, event_id, dwSize);
 
-	this->setepolevent(lpPerSocketContext->m_socket, EPOLL_CTL_MOD, EPOLLIN | EPOLLOUT, lpPerSocketContext);
+	this->setepolevent(lpPerSocketContext, EPOLL_CTL_MOD, EPOLLIN | EPOLLOUT);
 	return true;
 }
 
@@ -552,7 +548,7 @@ bool clibpoll::connect(int event_id, char* initData, int initLen)
 	return true;
 }
 
-int clibpoll::makeconnect(const char* ipaddr, unsigned short int port, int flag, LPPOL_PS_CTX ctx)
+int clibpoll::makeconnect(const char* ipaddr, unsigned short int port, int flag)
 {
 	int nRet = 0;
 	unsigned int bytes = 0;
@@ -565,16 +561,9 @@ int clibpoll::makeconnect(const char* ipaddr, unsigned short int port, int flag,
 
 	LPPOL_PS_CTX pSocketContext = NULL;
 
-	if (this->m_customctx == true) {
-		pSocketContext = ctx;
-	}
-	else {
-		pSocketContext = new POL_PS_CTX;
-	}
+	pSocketContext = new POL_PS_CTX;
+	pSocketContext->clear();
 
-	if (this->m_customctx == false) {
-		pSocketContext->clear();
-	}
 
 	sock_t s = this->createsocket(true);
 
@@ -611,7 +600,7 @@ int clibpoll::makeconnect(const char* ipaddr, unsigned short int port, int flag,
 
 	std::lock_guard<std::recursive_mutex> lk(m);
 	this->m_polmaps.insert(std::pair<int, LPPOL_PS_CTX>(event_id, pSocketContext));
-	this->setepolevent(s, EPOLL_CTL_ADD, EPOLLWRNORM, pSocketContext);
+	this->setepolevent(pSocketContext, EPOLL_CTL_ADD, EPOLLWRNORM | EPOLLHUP);
 	return event_id;
 }
 
@@ -631,7 +620,7 @@ bool clibpoll::setctx(int event_id, LPPOL_PS_CTX ctx)
 	}
 	this->m_polmaps.insert(std::pair<int, LPPOL_PS_CTX>(event_id, ctx));
 	if (ctx->m_socket != INVALID_SOCKET) {
-		this->setepolevent(ctx->m_socket, EPOLL_CTL_ADD, EPOLLIN, ctx);
+		this->setepolevent(ctx, EPOLL_CTL_ADD, EPOLLIN | EPOLLHUP);
 	}
 	return true;
 }
@@ -665,43 +654,27 @@ bool clibpoll::handleaccept()
 
 	LPPOL_PS_CTX lpAcceptSocketContext = NULL;
 
-	if (this->m_customctx == false) {
+	lpAcceptSocketContext = new POL_PS_CTX;
+	lpAcceptSocketContext->clear();
 
-		lpAcceptSocketContext = new POL_PS_CTX;
-		lpAcceptSocketContext->clear();
-
-		if (event_id == -1) {
-			this->addlog(epollogtype::eWARNING, "%s(), no available event id.", __func__);
-			closesocket(s);
-			delete lpAcceptSocketContext;
-			return false;
-		}
-
-		memcpy(lpAcceptSocketContext->m_ipaddr, strIP, sizeof(lpAcceptSocketContext->m_ipaddr));
-		lpAcceptSocketContext->m_socket = s;
-		lpAcceptSocketContext->m_type = (unsigned char)epoliotype::eRECV_IO | (unsigned char)epoliotype::eSEND_IO;
-		lpAcceptSocketContext->_this = this;
-		lpAcceptSocketContext->m_connected = true;
-		lpAcceptSocketContext->m_eventid = event_id;
-		std::lock_guard<std::recursive_mutex> lk(m);
-		this->m_polmaps.insert(std::pair<int, LPPOL_PS_CTX>(event_id, lpAcceptSocketContext));
-		this->setepolevent(s, EPOLL_CTL_ADD, EPOLLIN, lpAcceptSocketContext);
-	}
-	else {
-		if (event_id == -1) {
-			this->addlog(epollogtype::eWARNING, "%s(), no available event id.", __func__);
-			closesocket(s);
-			return false;
-		}
+	if (event_id == -1) {
+		this->addlog(epollogtype::eWARNING, "%s(), no available event id.", __func__);
+		closesocket(s);
+		delete lpAcceptSocketContext;
+		return false;
 	}
 
-	if (this->m_customctx == true) {
-		LPstpolConnectInfo connectinfo = (LPstpolConnectInfo)this->m_acceptarg;
-		if (connectinfo != NULL) {
-			memcpy(connectinfo->ipaddr, strIP, sizeof(connectinfo->ipaddr));
-			connectinfo->s = s;
-		}
-	}
+	memcpy(lpAcceptSocketContext->m_ipaddr, strIP, sizeof(lpAcceptSocketContext->m_ipaddr));
+	lpAcceptSocketContext->m_socket = s;
+	lpAcceptSocketContext->m_type = (unsigned char)epoliotype::eRECV_IO | (unsigned char)epoliotype::eSEND_IO;
+	lpAcceptSocketContext->_this = this;
+	lpAcceptSocketContext->m_connected = true;
+	lpAcceptSocketContext->m_eventid = event_id;
+	std::lock_guard<std::recursive_mutex> lk(m);
+	this->m_polmaps.insert(std::pair<int, LPPOL_PS_CTX>(event_id, lpAcceptSocketContext));
+
+	this->setepolevent(lpAcceptSocketContext, EPOLL_CTL_ADD, EPOLLIN | EPOLLHUP);
+
 
 	if (!this->m_acceptcb(event_id, this->m_acceptarg)) {
 		this->addlog(epollogtype::eWARNING, "%s(), Accept Callback returned false.", __func__);
@@ -709,22 +682,6 @@ bool clibpoll::handleaccept()
 		return false;
 	}
 
-	if (this->m_customctx == true) {
-		lpAcceptSocketContext = this->getctx(event_id);
-
-		if (lpAcceptSocketContext == NULL) {
-			this->addlog(epollogtype::eWARNING, "%s(), event id %d ctx is NULL.", __func__, event_id);
-			return false;
-		}
-
-		memcpy(lpAcceptSocketContext->m_ipaddr, strIP, sizeof(lpAcceptSocketContext->m_ipaddr));
-		lpAcceptSocketContext->m_socket = s;
-		lpAcceptSocketContext->m_type = (unsigned char)epoliotype::eRECV_IO | (unsigned char)epoliotype::eSEND_IO;
-		lpAcceptSocketContext->_this = this;
-		lpAcceptSocketContext->m_eventid = event_id;
-		lpAcceptSocketContext->m_connected = true;
-		this->setepolevent(lpAcceptSocketContext->m_socket, EPOLL_CTL_ADD, EPOLLIN, lpAcceptSocketContext);
-	}
 
 	this->addlog(epollogtype::eDEBUG, "%s(), event id %d sock_t:%d accepted.", __func__, event_id, lpAcceptSocketContext->m_socket);
 
@@ -742,7 +699,7 @@ bool clibpoll::handleconnect(LPPOL_PS_CTX ctx)
 
 	ctx->m_connected = true;
 	ctx->m_type = (unsigned char)epoliotype::eRECV_IO | (unsigned char)epoliotype::eSEND_IO;
-	this->setepolevent(ctx->m_socket, EPOLL_CTL_MOD, EPOLLIN | EPOLLOUT, ctx);
+	this->setepolevent(ctx, EPOLL_CTL_MOD, EPOLLIN | EPOLLOUT | EPOLLHUP);
 
 	if (ctx->eventcb != NULL) {
 		ctx->eventcb(event_id, epolstatus::eCONNECTED, ctx->arg);
@@ -791,7 +748,7 @@ void clibpoll::reqwrite(int event_id)
 		return;
 	if (_ctx->m_rawwrite == false)
 		return;
-	this->setepolevent(_ctx->m_socket, EPOLL_CTL_MOD, EPOLLIN | EPOLLOUT, _ctx);
+	this->setepolevent(_ctx, EPOLL_CTL_MOD, EPOLLIN | EPOLLOUT | EPOLLHUP);
 }
 
 bool clibpoll::handlesend(LPPOL_PS_CTX ctx)
@@ -801,7 +758,7 @@ bool clibpoll::handlesend(LPPOL_PS_CTX ctx)
 			if (!ctx->sendcb(ctx->m_eventid, ctx->arg)) {
 				return false;
 			}
-			this->setepolevent(ctx->m_socket, EPOLL_CTL_MOD, EPOLLIN, ctx);
+			this->setepolevent(ctx, EPOLL_CTL_MOD, EPOLLIN | EPOLLHUP);
 			return true;
 		}
 	}
@@ -811,42 +768,39 @@ bool clibpoll::handlesend(LPPOL_PS_CTX ctx)
 			std::vector<POL_BUFFER>::iterator iter;
 			iter = ctx->IOContext[1].vBuffer.begin();
 
-			//while (iter != ctx->IOContext[1].vBuffer.end()) 
-			{
+			int len = iter->len - iter->drained;
 
-				int len = iter->len - iter->drained;
+			if (len > POL_MAX_IO_BUFFER_SIZE) { // break the packets to chunks, default 8192 bytes chunk
+				len = POL_MAX_IO_BUFFER_SIZE;
+			}
 
-				if (len > POL_MAX_IO_BUFFER_SIZE) { // break the packets to chunks, default 8192 bytes chunk
-					len = POL_MAX_IO_BUFFER_SIZE;
-				}
+			if (send(ctx->m_socket, &iter->buffer[iter->drained], len, 0) == SOCKET_ERROR) {
+				this->addlog(epollogtype::eERROR, "%s, event id %d send error %d.", __func__, (int)ctx->m_eventid, SOCKERR);
+				return false;
+			}
 
-				if (send(ctx->m_socket, &iter->buffer[iter->drained], len, 0) == SOCKET_ERROR) {
-					this->addlog(epollogtype::eERROR, "%s, event id %d send error %d.", __func__, (int)ctx->m_eventid, SOCKERR);
-					return false;
-				}
+			iter->drained += len;
+			iter->sent = len;
 
-				iter->drained += len;
-				iter->sent = len;
+			if (ctx->sendcb != NULL && !ctx->sendcb(ctx->m_eventid, ctx->arg)) {
+				return false;
+			}
 
-				if (ctx->sendcb != NULL && !ctx->sendcb(ctx->m_eventid, ctx->arg)) {
-					return false;
-				}
+			this->addlog(epollogtype::eDEBUG, "%s, event id %d sent %d bytes", __func__, (int)ctx->m_eventid, len);
 
-				this->addlog(epollogtype::eDEBUG, "%s, event id %d sent %d bytes", __func__, (int)ctx->m_eventid, len);
+			if (iter->drained >= iter->len) { // fully drained so remove now from vector
+				this->addlog(epollogtype::eTEST, "%s, event id %d drained %d bytes from total of %d bytes",
+					__func__, (int)ctx->m_eventid, iter->drained, iter->len);
+				delete iter->buffer;
+				iter = ctx->IOContext[1].vBuffer.erase(iter);
+			}
 
-				if (iter->drained >= iter->len) { // fully drained so remove now from vector
-					this->addlog(epollogtype::eTEST, "%s, event id %d drained %d bytes from total of %d bytes",
-						__func__, (int)ctx->m_eventid, iter->drained, iter->len);
-					delete iter->buffer;
-					iter = ctx->IOContext[1].vBuffer.erase(iter);
-					//continue;
-				}
-
-				//iter++;
+			if (ctx->IOContext[1].vBuffer.size() == 0) {
+				this->setepolevent(ctx, EPOLL_CTL_MOD, EPOLLIN | EPOLLHUP);
 			}
 		}
 		else {
-			this->setepolevent(ctx->m_socket, EPOLL_CTL_MOD, EPOLLIN, ctx);
+			this->setepolevent(ctx, EPOLL_CTL_MOD, EPOLLIN | EPOLLHUP);
 			return true;
 		}
 	}
@@ -917,7 +871,7 @@ void clibpoll::closeeventid(int event_id, epolstatus flag)
 		if (ctx->eventcb != NULL)
 			ctx->eventcb(event_id, epolstatus::eCLOSED, ctx->arg);
 
-		this->setepolevent(ctx->m_socket, EPOLL_CTL_DEL, 0, ctx);
+		this->setepolevent(ctx, EPOLL_CTL_DEL, 0);
 		this->deleventid(event_id);
 
 		if (ctx->m_socket != INVALID_SOCKET) {
@@ -925,12 +879,7 @@ void clibpoll::closeeventid(int event_id, epolstatus flag)
 			this->addlog(epollogtype::eDEBUG, "%s(), event id %d socket %d closed.", __func__, event_id, (int)ctx->m_socket);
 			ctx->m_socket = INVALID_SOCKET;
 		}
-		if (this->m_customctx == false) {
-			this->deletectx(ctx);
-		}
-		else {
-			ctx->clear2();
-		}
+		this->deletectx(ctx);
 		break;
 	}
 }

@@ -44,7 +44,7 @@ int main()
     libpoll = new clibpoll;
     libpoll->init(logger);
     libpoll->listen(3000, acceptcb, NULL);
-    libpoll->dispatch_threads(4, INFINITE, 1);
+    libpoll->dispatch_threads(4, 10, 1);
 
     std::cout << "press any key to exit.\n";
 
@@ -53,6 +53,7 @@ int main()
     std::cout << "dispatchbreak called, cleaning the mess up...\n";
     libpoll->dispatchbreak();
     delete libpoll;
+    std::cout << "dispatchbreak called, cleaning done.\n";
 
     return 1;
 }

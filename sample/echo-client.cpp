@@ -50,7 +50,7 @@ int main()
 
     std::cout << "press any key to exit.\n";
 
-    libpoll->dispatch_threads(4, INFINITE, 1);
+    libpoll->dispatch_threads(4, 10, 1);
 
     int ret = getchar();
 
