@@ -19,15 +19,12 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\source\libpoll-wrapper.cpp" />
     <ClCompile Include="..\..\source\libpoll.cpp" />
     <ClCompile Include="..\..\source\third_party\wepoll.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\source\includes\libpoll-config.h" />
-    <ClInclude Include="..\..\source\includes\libpoll-wrapper.h" />
     <ClInclude Include="..\..\source\includes\libpoll.h" />
-    <ClInclude Include="..\..\source\third_party\wepoll.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
@@ -125,23 +122,24 @@
       <WarningLevel>Level3</WarningLevel>
       <FunctionLevelLinking>
       </FunctionLevelLinking>
-      <IntrinsicFunctions>
-      </IntrinsicFunctions>
+      <IntrinsicFunctions>false</IntrinsicFunctions>
       <SDLCheck>
       </SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions);_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions);_CRT_NONSTDC_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS</PreprocessorDefinitions>
       <ConformanceMode>Default</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>
       </PrecompiledHeaderFile>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <Optimization>
-      </Optimization>
-      <BufferSecurityCheck>
-      </BufferSecurityCheck>
-      <InlineFunctionExpansion />
+      <Optimization>MaxSpeed</Optimization>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <OmitFramePointers />
-      <WholeProgramOptimization>true</WholeProgramOptimization>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+      <UseFullPaths>false</UseFullPaths>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <DebugInformationFormat />
+      <DisableAnalyzeExternal>false</DisableAnalyzeExternal>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -151,7 +149,8 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <Lib>
-      <LinkTimeCodeGeneration>true</LinkTimeCodeGeneration>
+      <LinkTimeCodeGeneration>
+      </LinkTimeCodeGeneration>
     </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">

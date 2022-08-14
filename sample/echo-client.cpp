@@ -23,59 +23,59 @@
  * SOFTWARE.
  */
 #include <iostream>
-#include <libpoll-wrapper.h>
+#include <libpoll.h>
 #include <csignal>
 #include <iostream>
 #include <stdlib.h>
 #include <stdio.h>
 
-static bool acceptcb(polbase* base, int eventid, void* arg);
-static bool readcb(polbase* base, int eventid, void* arg);
-static bool writecb(polbase* base, int eventid, void* arg);
+static bool acceptcb(int eventid, void* arg);
+static bool readcb(int eventid, void* arg);
+static bool writecb(int eventid, void* arg);
 static void logger(epollogtype type, const char* msg);
-static void signal_handler(int signal);
-polbase* gbase = NULL;
+clibpoll* libpoll = NULL;
 
 int main()
 {
     char sbuf[100] = { 0 };
+    libpoll = new clibpoll;
+    libpoll->init(logger);
 
-    polbase* base = polnewbase(logger);
-    gbase = base;
-
-    for (int n = 0; n < 3; n++) {
-		sprintf_s(sbuf, 100, "Hello World!"); /**the initial data to send upon connection*/
-		int eventid = polconnect(base, "127.0.0.1", 3000, sbuf, strlen(sbuf)+1); /**set the initial buf size to 0 if there has no initial data to send*/
-        polsetcb(base, eventid, readcb, writecb, NULL, (void*)n);
+    for (int n = 0; n < 1; n++) {
+		sprintf_s(sbuf, 100, "Hello World!\0"); /**the initial data to send upon connection*/
+        int eventid = libpoll->makeconnect("127.0.0.1", 3000);
+        libpoll->connect(eventid, sbuf, strlen(sbuf)+1); /**set the initial buf size to 0 if there has no initial data to send*/
+        libpoll->setconnectcb(eventid, readcb, NULL, NULL, (void*)n);
     }
 
-    std::signal(SIGINT, signal_handler);
-    std::cout << "press Ctrl-C to exit.\n";
+    std::cout << "press any key to exit.\n";
 
-    /*single threaded dispatching of events*/
-    poldispatch(base, 1000); 
+    libpoll->dispatch_threads(4, 10, 1);
+
+    int ret = getchar();
 
     std::cout << "dispatchbreak called, cleaning the mess up...\n";
-    polbasedelete(base);
+    libpoll->dispatchbreak();
+    delete libpoll;
     return 1;
 }
 
 /**read callback*/
-static bool readcb(polbase* base, int eventid, void* arg)
+static bool readcb(int eventid, void* arg)
 {
     char buff[100] = { 0 };
     int index = (int)arg;
 
-    int readsize = polread(base, eventid, buff, sizeof(buff)); /**receive data, read it now...*/
-    printf("<<< Server echo to index %d : %s\n", index, buff);
+    int readsize = libpoll->readbuffer(eventid, buff, sizeof(buff)); /**receive data, read it now...*/
+    printf("<<< Server echo to index %d : %d %s\n", index, readsize, buff);
     return true;
 }
 
 /**write callback, we can only get the size of data sent in this callback*/
-static bool writecb(polbase* base, int eventid, void* arg)
+static bool writecb(int eventid, void* arg)
 {
     int index = (int)arg;
-    printf(">>> index %d Sent %llu bytes\n", index, polgetsentbytes(base, eventid));
+    printf(">>> index %d Sent %u bytes\n", index, (unsigned int)libpoll->getsentbytes(eventid));
     return true;
 }
 
@@ -99,9 +99,4 @@ static void logger(epollogtype type, const char* msg)
         printf("[WARNING] %s\n", msg);
         break;
     }
-}
-
-static void signal_handler(int signal)
-{
-    poldispatchbreak(gbase); /**we will return dispatch upon Ctrl-C*/
 }

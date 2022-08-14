@@ -7,8 +7,8 @@
 	@version libpoll 1.x.x
 */
 #define _LIBPOLL_MAJOR_VER_ 0x01
-#define _LIBPOLL_MINOR_VER_ 0x07
-#define _LIBPOLL_PATCH_VER_ 0x07
+#define _LIBPOLL_MINOR_VER_ 0x08
+#define _LIBPOLL_PATCH_VER_ 0x08
 
 /*
  * MIT License
@@ -84,7 +84,7 @@ uint32_t GetTickCount();
 #endif
 
 #define POL_MAX_CONT_REALLOC_REQ		100			
-#define POL_MAX_EVENTS 1024
+#define POL_MAX_EVENTS 256
 
 #define DISPATCH_LOOP_ONCE 1
 #define DISPATCH_DONT_BLOCK 2
@@ -141,23 +141,36 @@ typedef void (*polloghandler)(epollogtype logtype, const char* message);
 /**
 	Read callback typedef.
 */
-typedef bool (*polreadcb)(polbase* base, int event_id, void* argument);
+typedef bool (*polreadcb)(int event_id, void* argument);
 
 /**
 	Write callback typedef.
 */
-typedef bool (*polwritecb)(polbase* base, int event_id, void* argument);
+typedef bool (*polwritecb)(int event_id, void* argument);
 
 /**
 	Event callback typedef.
 */
-typedef void (*poleventcb)(polbase* base, int event_id, epolstatus eventype, void* argument);
+typedef void (*poleventcb)(int event_id, epolstatus eventype, void* argument);
 
 /**
 	Accept callback typedef.
 */
-typedef bool (*polacceptcb)(polbase* base, int event_id, void* argument);
+typedef bool (*polacceptcb)(int event_id, void* argument);
 
+typedef struct _POL_BUFFER
+{
+	void clear()
+	{
+		memset(&buffer[0], 0, len);
+		drained = 0;
+		sent = 0;
+	}
+	char* buffer;
+	int len;
+	int drained;
+	int sent;
+} POL_BUFFER, * LP_POL_BUFFER;
 
 typedef struct _POL_PIO_CTX
 {
@@ -167,30 +180,14 @@ typedef struct _POL_PIO_CTX
 	}
 	void clear()
 	{
-		pBuffer = NULL;
-		pBufferLen = 0;
-		pReallocCounts = 0;
-		nSecondOfs = 0;
+		vBuffer.clear();
 		nTotalBytes = 0;
 		nSentBytes = 0;
-		nWaitIO = 0;
-	}
-	void clear2()
-	{
-		pReallocCounts = 0;
-		nSecondOfs = 0;
-		nTotalBytes = 0;
-		nSentBytes = 0;
-		nWaitIO = 0;
 	}
 	char Buffer[POL_MAX_IO_BUFFER_SIZE];
-	char* pBuffer;
-	size_t pBufferLen;
-	int pReallocCounts;
-	size_t nSecondOfs;
+	std::vector<POL_BUFFER> vBuffer;
 	int nTotalBytes;
 	size_t nSentBytes;
-	int nWaitIO;
 } POL_PIO_CTX, * LPPOL_PIO_CTX;
 
 typedef struct _POL_PS_CTX
@@ -219,39 +216,11 @@ typedef struct _POL_PS_CTX
 		arg = NULL;
 		arg2 = NULL;
 		_this = NULL;
-		m_shutdown = false;
 		m_once = false;
 		m_rawread = false;
 		m_rawwrite = false;
-		m_state = 0;
+		m_events = 0;
 	}
-
-	void clear2()
-	{
-		m_socket = INVALID_SOCKET;
-		m_index = -1;
-		m_eventid = -1;
-		m_type = -1;
-		m_initbuflen = 0;
-		m_connected = false;
-		memset(m_ipaddr, 0, sizeof(m_ipaddr));
-		recvcb = NULL;
-		sendcb = NULL;
-		eventcb = NULL;
-		m_conipaddr = 0;
-		m_conport = 0;
-		IOContext[0].clear2();
-		IOContext[1].clear2();
-		arg = NULL;
-		arg2 = NULL;
-		_this = NULL;
-		m_shutdown = false;
-		m_once = false;
-		m_rawread = false;
-		m_rawwrite = false;
-		m_state = 0;
-	}
-
 
 	intptr_t m_index;
 	sock_t m_socket;
@@ -260,20 +229,19 @@ typedef struct _POL_PS_CTX
 	unsigned char m_type;
 	char m_ipaddr[16];
 	bool m_connected;
-	unsigned int m_conipaddr;
-	unsigned int m_conport;
-	unsigned int m_initbuflen;
+	uint32_t m_conipaddr;
+	uint32_t m_conport;
+	uint32_t m_initbuflen;
 	polreadcb recvcb;
 	polwritecb sendcb;
 	poleventcb eventcb;
 	void* arg;
 	void* arg2;
 	void* _this;
-	bool m_shutdown;
 	bool m_once;
 	bool m_rawread;
 	bool m_rawwrite;
-	int m_state;
+	uint32_t m_events;
 } POL_PS_CTX, *LPPOL_PS_CTX;
 
 
@@ -282,8 +250,9 @@ class clibpoll
 public:
 	clibpoll();
 	~clibpoll();
-	void init(polloghandler loghandler=NULL, unsigned int logverboseflags = -1,
-		size_t initclt2ndbufsize = NULL, size_t initsvr2ndbufsize = NULL);
+	void init(polloghandler loghandler=NULL, unsigned int logverboseflags = -1);
+
+	void dispatch_threads(int threadcounts, uint32_t timeout = INFINITE, int maxevents = 10, unsigned int flags = 0);
 
 	void dispatch(uint32_t timeout=INFINITE, int maxevents=10, unsigned int flags=0);
 	void dispatchbreak();
@@ -296,7 +265,7 @@ public:
 
 	void setraw(int event_id, bool read, bool write);
 
-	int makeconnect(const char* ipaddr, unsigned short int port, int flag=0, LPPOL_PS_CTX ctx=NULL);
+	int makeconnect(const char* ipaddr, unsigned short int port, int flag=0);
 	bool connect(int event_id, char* initData, int initLen);
 
 	bool sendbuffer(int event_id, unsigned char* lpMsg, size_t dwSize);
@@ -317,7 +286,6 @@ public:
 	void addlog(epollogtype type, const char* msg, ...);
 
 	bool setctx(int event_id, LPPOL_PS_CTX ctx);
-	void enablecustomctx() { this->m_customctx = true; }
 
 	LPPOL_PS_CTX getctx(int event_id);
 	void deletectx(LPPOL_PS_CTX ctx);
@@ -330,8 +298,10 @@ private:
 
 	std::recursive_mutex _m;
 
-	void loop(uint32_t timeout, std::thread::id tid, struct epoll_event * events, int maxevents);
-	void setepolevent(sock_t s, uint32_t cmd, uint32_t flags, LPPOL_PS_CTX ctx);
+	void dispatch_thread_run();
+
+	int loop(uint32_t timeout, std::thread::id tid, struct epoll_event * events, int maxevents);
+	void setepolevent(LPPOL_PS_CTX ctx, uint32_t cmd, uint32_t flags);
 
 	intptr_t m_tindex;
 	polloghandler fnc_loghandler;
@@ -356,9 +326,6 @@ private:
 	LPPOL_PS_CTX m_acceptctx;
 	uint32_t m_accepteventid;
 
-	size_t m_initcltextbuffsize;
-	size_t m_initsvrextbuffsize;
-
 	std::map<int, LPPOL_PS_CTX>m_polmaps;
 	bool m_polmapsupdated;
 
@@ -370,15 +337,16 @@ private:
 
 	int m_activeworkers;
 
-	bool m_customctx;
 	bool m_loopbreak;
 
 	unsigned int m_dispatchflags;
-	std::thread* m_t;
 	bool m_tstarted;
 	HANDLE m_epollfd;
-
 	int m_tcount;
+	uint32_t m_ttimeout;
+	int m_tmaxevents;
+	unsigned int m_tflags;
+	std::thread* m_t;
 };
 
 
