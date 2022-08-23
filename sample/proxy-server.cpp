@@ -22,7 +22,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#include <libpoll-wrapper.h>
+#include <libpoll.h>
 #include <csignal>
 #include <iostream>
 #include <stdlib.h>
@@ -31,16 +31,16 @@
 
 
 static void logger(epollogtype type, const char* msg);
-static bool acceptcb(polbase* base, int eventid, void* arg);
-static bool readcb(polbase* base, int eventid, void* arg);
-static bool remote_readcb(polbase* base, int eventid, void* arg);
+static bool acceptcb(int eventid, void* arg);
+static bool readcb(int eventid, void* arg);
+static bool remote_readcb(int eventid, void* arg);
 static void signal_handler(int signal);
 
 static int portProxy;
 static int portServer;
 static char proxyip[50] = { 0 };
 static char svrip[50] = { 0 };
-polbase* gbase = NULL;
+clibpoll* libpoll = NULL;
 
 int main(int argc, char* argv[])
 {
@@ -63,58 +63,59 @@ int main(int argc, char* argv[])
     memcpy(&proxyip, argv[1], sizeof(proxyip));
     memcpy(&svrip, argv[3], sizeof(svrip));
 
-    polbase* base = polnewbase(logger);
-    gbase = base;
-    pollisten(base, portProxy, acceptcb, NULL, proxyip);
-    poldispatch(base);
-    polbasedelete(base);
+    libpoll = new clibpoll;
+    libpoll->init(logger);
+    libpoll->listen(portProxy, acceptcb, NULL, proxyip);
+
+    libpoll->dispatch();
+    delete libpoll;
     return 1;
 }
 
-static bool acceptcb(polbase* base, int eventid, void* arg)
+static bool acceptcb(int eventid, void* arg)
 {
-    int event_id = polmakeconnect(base, svrip, portServer); // create the event id of remote connection
+    int event_id = libpoll->makeconnect(svrip, portServer); // create the event id of remote connection
 
     intptr_t _event_id = static_cast<intptr_t>(event_id);
-    polsetcb(base, eventid, readcb, NULL, NULL, (void*)_event_id); // pass remote event id to client callback
+    libpoll->setconnectcb(eventid, readcb, NULL, NULL, (void*)_event_id); // pass remote event id to client callback
 
     intptr_t _eventid = static_cast<intptr_t>(eventid);
-    polsetcb(base, event_id, remote_readcb, NULL, NULL, (void*)_eventid); // pass proxy event id to remote callback
+    libpoll->setconnectcb(event_id, remote_readcb, NULL, NULL, (void*)_eventid); // pass proxy event id to remote callback
 
     return true;
 }
 
-static bool readcb(polbase* base, int eventid, void* arg)
+static bool readcb(int eventid, void* arg)
 {
     intptr_t ptr = (intptr_t)arg;
     int remote_eventid = static_cast<int>(ptr);
     char buf[POL_MAX_IO_BUFFER_SIZE] = { 0 };
 
-    size_t size = polread(base, eventid, buf, POL_MAX_IO_BUFFER_SIZE);
+    size_t size = libpoll->readbuffer(eventid, buf, POL_MAX_IO_BUFFER_SIZE);
 
     if (size == 0)
         return false;
 
-    if (!polisconnected(base, remote_eventid)) {
-        return polconnect(base, remote_eventid, buf, size); // connect to remote and send initial buffer
+    if (!libpoll->isconnected(remote_eventid)) {
+        return libpoll->connect(remote_eventid, buf, size); // connect to remote and send initial buffer
     }
     else {
-        return polwrite(base, remote_eventid, (unsigned char*)buf, size);
+        return libpoll->sendbuffer(remote_eventid, (unsigned char*)buf, size);
     }
 }
 
-static bool remote_readcb(polbase* base, int eventid, void* arg)
+static bool remote_readcb(int eventid, void* arg)
 {
     intptr_t ptr = (intptr_t)arg;
     int local_eventid = static_cast<int>(ptr);
     char buf[POL_MAX_IO_BUFFER_SIZE] = { 0 };
 
-    size_t size = polread(base, eventid, buf, POL_MAX_IO_BUFFER_SIZE);
+    size_t size = libpoll->readbuffer(eventid, buf, POL_MAX_IO_BUFFER_SIZE);
 
     if (size == 0)
         return false;
 
-    return polwrite(base, local_eventid, (unsigned char*)buf, size);
+    return libpoll->sendbuffer(local_eventid, (unsigned char*)buf, size);
 }
 
 static void logger(epollogtype type, const char* msg)
@@ -137,5 +138,5 @@ static void logger(epollogtype type, const char* msg)
 
 static void signal_handler(int signal)
 {
-    poldispatchbreak(gbase); /**we will return dispatch upon Ctrl-C*/
+    libpoll->dispatchbreak(); /**we will return dispatch upon Ctrl-C*/
 }

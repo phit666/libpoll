@@ -85,7 +85,6 @@ void clibpoll::deleventid(int eventid)
 {
 	LPPOL_PS_CTX _ctx = NULL;
 	std::map <int, LPPOL_PS_CTX>::iterator iterq;
-	std::lock_guard<std::recursive_mutex> lk(m);
 	iterq = this->m_polmaps.find(eventid);
 	if (iterq != this->m_polmaps.end()) {
 		this->m_polmaps.erase(iterq);
@@ -114,6 +113,15 @@ bool clibpoll::iseventidvalid(int event_id)
 	if (this->getctx(event_id) != NULL)
 		bret = true;
 	return bret;
+}
+
+bool clibpoll::isconnected(int event_id)
+{
+	std::lock_guard<std::recursive_mutex> lk(m);
+	LPPOL_PS_CTX ctx = this->getctx(event_id);
+	if (ctx == NULL)
+		return false;
+	return ctx->m_connected;
 }
 
 LPPOL_PS_CTX clibpoll::getctx(int event_id)
@@ -313,7 +321,6 @@ void clibpoll::dispatch_threads(int threadcounts, uint32_t timeout, int maxevent
 		this->m_t[n].detach();
 	}
 }
-
 
 void clibpoll::dispatchbreak()
 {
@@ -807,7 +814,6 @@ bool clibpoll::handlesend(LPPOL_PS_CTX ctx)
 	return true;
 }
 
-/**this should be called inside the read callback only as there has no thread lock in it.*/
 size_t clibpoll::readbuffer(int event_id, char* buffer, size_t buffersize)
 {
 	size_t readbytes = 0;

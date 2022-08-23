@@ -7,7 +7,7 @@
 	@version libpoll 1.x.x
 */
 #define _LIBPOLL_MAJOR_VER_ 0x01
-#define _LIBPOLL_MINOR_VER_ 0x08
+#define _LIBPOLL_MINOR_VER_ 0x09
 #define _LIBPOLL_PATCH_VER_ 0x08
 
 /*
@@ -283,6 +283,7 @@ public:
 	void reqwrite(int event_id);
 
 	bool iseventidvalid(int event_id);
+	bool isconnected(int event_id);
 	void addlog(epollogtype type, const char* msg, ...);
 
 	bool setctx(int event_id, LPPOL_PS_CTX ctx);
